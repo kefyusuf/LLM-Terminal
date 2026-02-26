@@ -157,7 +157,9 @@ class AIModelViewer(App):
     RadioSet { layout: horizontal; width: 100%; height: 3; border: none; align: center middle; margin-bottom: 1; }
     #use-case-filter { height: 3; }
     #gem-toggle { margin-bottom: 1; }
-    DataTable { height: 1fr; border: round grey; }
+    #results-table { height: 1fr; border: round grey; }
+    #downloads-label { margin-top: 1; }
+    #download-history-table { height: 8; border: round grey; }
     #status-bar { height: 1; color: $text-muted; margin-top: 1; }
     """
 
@@ -194,6 +196,8 @@ class AIModelViewer(App):
         self.download_started_at = {}
         self.download_spinner_index = 0
         self.download_spinner_frames = ["-", "\\", "|", "/"]
+        self.download_registry = {}
+        self.download_history_limit = 50
 
     def compose(self) -> ComposeResult:
         yield SystemInfoWidget(id="header")
@@ -218,12 +222,14 @@ class AIModelViewer(App):
             "Hidden gems only (HF: high downloads, low likes)", id="gem-toggle"
         )
         yield DataTable(id="results-table", cursor_type="row")
+        yield Label("Recent Downloads", id="downloads-label")
+        yield DataTable(id="download-history-table", cursor_type="row")
         yield Static("", id="status-bar")
         yield Footer()
 
     def on_mount(self) -> None:
         self.title = "AI Model Explorer"
-        table = self.query_one(DataTable)
+        table = self.query_one("#results-table", DataTable)
         table.add_columns(
             "Installed",
             "Source",
@@ -238,6 +244,16 @@ class AIModelViewer(App):
             "Size",
             "Download",
         )
+        download_table = self.query_one("#download-history-table", DataTable)
+        download_table.add_columns(
+            "Source",
+            "Publisher",
+            "Model",
+            "Status",
+            "Detail",
+            "Updated",
+        )
+        self.refresh_download_history_table()
         self.update_status("Ready. Enter a model query and press Enter.")
         self.update_system_info()
         if not self.ollama_running:
@@ -286,7 +302,7 @@ class AIModelViewer(App):
         self.last_search_error = ""
         self.search_counter += 1
         self.active_search_id = self.search_counter
-        table = self.query_one(DataTable)
+        table = self.query_one("#results-table", DataTable)
         table.clear()
         table.loading = True
         self.update_status(f"Searching: {query}")
@@ -379,6 +395,9 @@ class AIModelViewer(App):
         self.refresh_table()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        data_table = getattr(event, "data_table", None)
+        if data_table is not None and data_table.id != "results-table":
+            return
         row_key = str(event.row_key.value)
         selected_model = next(
             (
@@ -411,7 +430,7 @@ class AIModelViewer(App):
                 process.terminate()
             except OSError:
                 pass
-        self._set_download_state(target_id, "cancelled", "Canceled", "")
+        self._set_download_state(target_id, "cancelled", "Canceled", "", model=model)
         self.update_status(f"Cancel requested: {model.get('name', target_id)}")
 
     def start_model_download(self, model):
@@ -422,7 +441,7 @@ class AIModelViewer(App):
 
         self.active_downloads.add(target_id)
         self.download_started_at[target_id] = time.monotonic()
-        self._set_download_state(target_id, "queued", "Queued", "")
+        self._set_download_state(target_id, "queued", "Queued", "", model=model)
         self.update_status(f"Downloading: {model.get('name', target_id)}")
         self.download_model_worker(model.copy(), target_id)
 
@@ -547,14 +566,98 @@ class AIModelViewer(App):
                 return item
         return None
 
-    def _set_download_state(self, target_id, state, label, detail):
+    def _record_download_entry(
+        self, target_id, model=None, state=None, label=None, detail=None
+    ):
+        existing = self.download_registry.get(target_id, {})
+
+        source = existing.get("source", "-")
+        publisher = existing.get("publisher", "-")
+        name = existing.get("name", target_id)
+
+        if model is None:
+            model = self._find_model_by_target_id(target_id)
+        if model is not None:
+            source = model.get("source", source)
+            publisher = model.get("publisher", publisher)
+            name = model.get("name", name)
+
+        entry = {
+            "target_id": target_id,
+            "source": source,
+            "publisher": publisher,
+            "name": name,
+            "state": state if state is not None else existing.get("state", "idle"),
+            "label": label if label is not None else existing.get("label", "Idle"),
+            "detail": detail if detail is not None else existing.get("detail", ""),
+            "updated_at": time.time(),
+        }
+        self.download_registry[target_id] = entry
+
+        if len(self.download_registry) > self.download_history_limit:
+            sorted_keys = sorted(
+                self.download_registry,
+                key=lambda key: self.download_registry[key].get("updated_at", 0),
+            )
+            for key in sorted_keys[
+                : len(self.download_registry) - self.download_history_limit
+            ]:
+                self.download_registry.pop(key, None)
+
+    def refresh_download_history_table(self):
+        table = self.query_one("#download-history-table", DataTable)
+        table.clear()
+
+        entries = sorted(
+            self.download_registry.values(),
+            key=lambda item: item.get("updated_at", 0),
+            reverse=True,
+        )
+
+        for entry in entries[: self.download_history_limit]:
+            updated = time.strftime(
+                "%H:%M:%S", time.localtime(entry.get("updated_at", 0))
+            )
+            table.add_row(
+                entry.get("source", "-"),
+                entry.get("publisher", "-"),
+                entry.get("name", "-"),
+                self._download_status_text_from_state(
+                    entry.get("state", "idle"),
+                    entry.get("label", "Idle"),
+                ),
+                entry.get("detail", ""),
+                updated,
+                key=entry.get("target_id", "-"),
+            )
+
+    def _download_status_text_from_state(self, state, label):
+        if state == "completed":
+            return "[green]Completed[/green]"
+        if state == "failed":
+            return "[red]Failed[/red]"
+        if state == "cancelled":
+            return "[yellow]Canceled[/yellow]"
+        if state == "downloading":
+            frame = self.download_spinner_frames[
+                self.download_spinner_index % len(self.download_spinner_frames)
+            ]
+            return f"[yellow]{frame} {label}[/yellow]"
+        if state == "queued":
+            return "[cyan]Queued[/cyan]"
+        return "[grey50]Idle[/grey50]"
+
+    def _set_download_state(self, target_id, state, label, detail, model=None):
+        self._record_download_entry(
+            target_id, model=model, state=state, label=label, detail=detail
+        )
         model = self._find_model_by_target_id(target_id)
-        if not model:
-            return
-        model["download_state"] = state
-        model["download_label"] = label
-        model["download_detail"] = detail
-        self.refresh_table()
+        if model:
+            model["download_state"] = state
+            model["download_label"] = label
+            model["download_detail"] = detail
+            self.refresh_table()
+        self.refresh_download_history_table()
 
     def _download_cell_text(self, model):
         state = model.get("download_state", "idle")
@@ -578,23 +681,34 @@ class AIModelViewer(App):
 
     def _ensure_download_fields(self):
         for item in self.all_results:
-            item.setdefault("download_state", "idle")
-            item.setdefault("download_label", "Idle")
-            item.setdefault("download_detail", "")
+            target_id = download_target_id(item)
+            entry = self.download_registry.get(target_id)
+            if entry:
+                item["download_state"] = entry.get("state", "idle")
+                item["download_label"] = entry.get("label", "Idle")
+                item["download_detail"] = entry.get("detail", "")
+            else:
+                item.setdefault("download_state", "idle")
+                item.setdefault("download_label", "Idle")
+                item.setdefault("download_detail", "")
 
     def refresh_download_progress(self):
         if not self.active_downloads:
             return
         self.download_spinner_index += 1
         now = time.monotonic()
-        updated = False
+        table_updated = False
+        history_updated = False
         for target_id in list(self.active_downloads):
             model = self._find_model_by_target_id(target_id)
-            if not model:
+            entry = self.download_registry.get(target_id)
+            if entry and entry.get("state") != "downloading":
                 continue
-            if model.get("download_state") != "downloading":
-                continue
-            detail = model.get("download_detail", "")
+            detail = ""
+            if model:
+                detail = model.get("download_detail", "")
+            elif entry:
+                detail = entry.get("detail", "")
             if "%" in detail:
                 continue
             started = self.download_started_at.get(target_id)
@@ -603,10 +717,28 @@ class AIModelViewer(App):
             elapsed = int(now - started)
             next_detail = f"{elapsed}s"
             if detail != next_detail:
-                model["download_detail"] = next_detail
-                updated = True
-        if updated:
+                if model:
+                    model["download_detail"] = next_detail
+                    table_updated = True
+                self._record_download_entry(
+                    target_id,
+                    model=model,
+                    state="downloading",
+                    label="Downloading",
+                    detail=next_detail,
+                )
+                history_updated = True
+
+        if table_updated or any(
+            self.download_registry.get(target_id, {}).get("state") == "downloading"
+            for target_id in self.active_downloads
+        ):
             self.refresh_table()
+        if history_updated or any(
+            self.download_registry.get(target_id, {}).get("state") == "downloading"
+            for target_id in self.active_downloads
+        ):
+            self.refresh_download_history_table()
 
     def on_download_progress(self, target_id, state, label, detail):
         self._set_download_state(target_id, state, label, detail)
@@ -617,16 +749,22 @@ class AIModelViewer(App):
         self.download_started_at.pop(target_id, None)
         if target_id in self.cancelled_downloads:
             self.cancelled_downloads.discard(target_id)
-            self._set_download_state(target_id, "cancelled", "Canceled", "")
+            self._set_download_state(
+                target_id, "cancelled", "Canceled", "", model=model
+            )
             self.update_status(f"Download canceled: {model.get('name', target_id)}")
             return
         if success:
-            self._set_download_state(target_id, "completed", "Completed", "")
+            self._set_download_state(
+                target_id, "completed", "Completed", "", model=model
+            )
             if model.get("source") == "Ollama":
                 self._mark_ollama_model_installed(model.get("name", ""))
             self.update_status(f"Download complete: {model.get('name', target_id)}")
             return
-        self._set_download_state(target_id, "failed", "Failed", message[:40])
+        self._set_download_state(
+            target_id, "failed", "Failed", message[:40], model=model
+        )
         self.update_status(f"Download failed: {message}")
 
     def _mark_ollama_model_installed(self, model_name):
@@ -681,7 +819,7 @@ class AIModelViewer(App):
         if search_id != self.active_search_id:
             return
 
-        table = self.query_one(DataTable)
+        table = self.query_one("#results-table", DataTable)
         table.loading = False
         self.refresh_table()
 
@@ -710,7 +848,7 @@ class AIModelViewer(App):
         table.focus()
 
     def refresh_table(self):
-        table = self.query_one(DataTable)
+        table = self.query_one("#results-table", DataTable)
         table.clear()
         added = set()
 
