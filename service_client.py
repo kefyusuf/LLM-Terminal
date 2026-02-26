@@ -6,6 +6,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import psutil
+
 
 SERVICE_HOST = "127.0.0.1"
 SERVICE_PORT = 8765
@@ -45,14 +47,7 @@ def is_service_compatible(health):
     return version >= MIN_SERVICE_VERSION
 
 
-def ensure_service_running():
-    if is_service_running():
-        try:
-            health = get_service_health()
-            return is_service_compatible(health)
-        except (URLError, HTTPError, TimeoutError, ValueError):
-            return False
-
+def _start_service_process():
     script_path = Path(__file__).resolve().with_name("download_service.py")
     if sys.platform.startswith("win"):
         detached = getattr(subprocess, "DETACHED_PROCESS", 0)
@@ -71,12 +66,62 @@ def ensure_service_running():
             start_new_session=True,
         )
 
-    deadline = time.time() + 6.0
+
+def _wait_for_service(deadline_seconds=6.0):
+    deadline = time.time() + deadline_seconds
     while time.time() < deadline:
-        if is_service_running():
-            return True
+        try:
+            health = get_service_health()
+            if health.get("ok") and is_service_compatible(health):
+                return True
+        except (URLError, HTTPError, TimeoutError, ValueError):
+            pass
         time.sleep(0.2)
     return False
+
+
+def stop_service():
+    stopped_any = False
+
+    try:
+        _request("POST", "/shutdown", payload={}, timeout=1.0)
+        stopped_any = True
+    except (URLError, HTTPError, TimeoutError, ValueError):
+        pass
+
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        try:
+            cmdline = proc.info.get("cmdline") or []
+            joined = " ".join(cmdline).lower()
+            if "download_service.py" in joined:
+                proc.kill()
+                stopped_any = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+    if not stopped_any:
+        return False
+
+    deadline = time.time() + 3.0
+    while time.time() < deadline:
+        if not is_service_running():
+            return True
+        time.sleep(0.1)
+    return not is_service_running()
+
+
+def ensure_service_running():
+    if is_service_running():
+        try:
+            health = get_service_health()
+            if is_service_compatible(health):
+                return True
+            stop_service()
+        except (URLError, HTTPError, TimeoutError, ValueError):
+            stop_service()
+
+    _start_service_process()
+    return _wait_for_service(deadline_seconds=6.0)
 
 
 def list_jobs(limit=50):

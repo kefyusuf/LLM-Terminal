@@ -50,7 +50,7 @@ pip install -r requirements-dev.txt
 python main.py
 ```
 
-The app auto-starts a local download service on `127.0.0.1:8765` when needed.
+The app auto-starts a local download service on `127.0.0.1:8765` when needed and automatically restarts incompatible legacy instances.
 
 ## Run Tests
 

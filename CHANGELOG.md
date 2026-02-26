@@ -39,6 +39,8 @@
 - Kept search results stable during active downloads by showing state-only labels and avoiding per-tick table refresh.
 - Added orphaned-running job recovery after service restarts to prevent stuck non-cancelable states.
 - Improved cancel handling with terminate+kill fallback and explicit cancel-requested status updates.
+- Added automatic legacy-service shutdown/restart path when incompatible downloader service is detected.
+- Added service `/shutdown` endpoint for controlled app-driven restarts.
 
 ## 0.1.0 - 2026-02-26
 

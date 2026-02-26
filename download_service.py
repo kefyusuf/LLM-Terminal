@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -264,6 +265,7 @@ class DownloadServiceState:
         self.running_processes = {}
         self.running_lock = threading.Lock()
         self.stop_event = threading.Event()
+        self.server: Any = None
 
     def get_process(self, target_id):
         with self.running_lock:
@@ -280,6 +282,12 @@ class DownloadServiceState:
     def snapshot_active_targets(self):
         with self.running_lock:
             return list(self.running_processes.keys())
+
+    def request_shutdown(self):
+        self.stop_event.set()
+        server = self.server
+        if server is not None:
+            threading.Thread(target=server.shutdown, daemon=True).start()
 
 
 STATE = DownloadServiceState()
@@ -524,6 +532,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(200, {"job": job})
             return
 
+        if self.path == "/shutdown":
+            self._json_response(200, {"ok": True})
+            STATE.request_shutdown()
+            return
+
         self._json_response(404, {"error": "not found"})
 
     def log_message(self, format, *args):
@@ -535,6 +548,7 @@ def main():
     worker.start()
 
     server = ThreadingHTTPServer((HOST, PORT), Handler)
+    STATE.server = server
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
