@@ -12,7 +12,7 @@ import psutil
 SERVICE_HOST = "127.0.0.1"
 SERVICE_PORT = 8765
 SERVICE_BASE_URL = f"http://{SERVICE_HOST}:{SERVICE_PORT}"
-MIN_SERVICE_VERSION = "1.1"
+MIN_SERVICE_VERSION = "1.2"
 
 
 def _request(method, path, payload=None, timeout=2.0):
@@ -143,7 +143,12 @@ def cancel_job(target_id):
     )
 
 
-def delete_job(target_id):
-    return _request(
-        "POST", "/jobs/delete", payload={"target_id": target_id}, timeout=2.0
-    )
+def delete_job(target_id, _retry=True):
+    try:
+        return _request(
+            "POST", "/jobs/delete", payload={"target_id": target_id}, timeout=2.0
+        )
+    except HTTPError as exc:
+        if exc.code == 404 and _retry and ensure_service_running():
+            return delete_job(target_id, _retry=False)
+        raise

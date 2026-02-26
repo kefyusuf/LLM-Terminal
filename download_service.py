@@ -20,7 +20,7 @@ from download_manager import (
 DB_PATH = Path(__file__).resolve().with_name("downloads.db")
 HOST = "127.0.0.1"
 PORT = 8765
-SERVICE_VERSION = "1.1"
+SERVICE_VERSION = "1.2"
 
 
 class DownloadStore:

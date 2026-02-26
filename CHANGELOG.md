@@ -48,6 +48,8 @@
 - Added service `/jobs/delete` endpoint with active-job protection.
 - Fixed recent-download modal actions to call app handlers directly for reliable cancel/delete behavior.
 - Added detailed user-visible delete/cancel error messages from service responses.
+- Bumped service compatibility baseline to `1.2` so legacy instances are auto-restarted.
+- Added delete retry logic that restarts incompatible services when `/jobs/delete` is missing.
 
 ## 0.1.0 - 2026-02-26
 
