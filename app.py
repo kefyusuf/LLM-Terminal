@@ -75,7 +75,11 @@ class ModelDetailModal(ModalScreen):
             cmd_text = f"huggingface-cli download {repo_id} --include '*.gguf'"
 
         size_source = self.data.get("size_source", "estimated")
-        confidence_label = "Exact" if size_source == "exact" else "Estimated"
+        confidence_label = (
+            "[green]Exact[/green]"
+            if size_source == "exact"
+            else "[yellow]Estimated[/yellow]"
+        )
 
         with Vertical(id="modal-container"):
             yield Label(f"{self.data['name']}", id="modal-title")
