@@ -456,6 +456,8 @@ class AIModelViewer(App):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
             )
             self.download_processes[target_id] = process

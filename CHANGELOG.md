@@ -22,6 +22,7 @@
 - Fixed modal download actions and added timer-based fallback progress updates in the download column.
 - Added animated spinner indicator in the download column during active downloads.
 - Made modal action buttons state-aware so `Cancel Download` only appears for active downloads.
+- Fixed Windows Unicode decode crash in download streaming by forcing UTF-8 with replacement fallback.
 
 ## 0.1.0 - 2026-02-26
 
