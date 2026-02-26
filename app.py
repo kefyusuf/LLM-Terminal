@@ -25,7 +25,7 @@ class ModelDetailModal(ModalScreen):
     CSS = """
     ModelDetailModal {
         align: center middle;
-        background: rgba(0,0,0,0.7);
+        background: $background;
     }
     #modal-container {
         width: 60%;
@@ -159,6 +159,7 @@ class AIModelViewer(App):
         self.search_cache_max_entries = 20
         self.search_cache_ram_threshold_gb = 1.0
         self.search_cache_vram_threshold_gb = 1.0
+        self.system_info_timer = None
 
     def compose(self) -> ComposeResult:
         yield SystemInfoWidget(id="header")
@@ -204,7 +205,18 @@ class AIModelViewer(App):
         )
         self.update_status("Ready. Enter a model query and press Enter.")
         self.update_system_info()
-        self.set_interval(3.0, self.update_system_info)
+        self.system_info_timer = self.set_interval(3.0, self.update_system_info)
+
+    def _pause_system_updates(self):
+        if self.system_info_timer:
+            self.system_info_timer.pause()
+
+    def _resume_system_updates(self):
+        if self.system_info_timer:
+            self.system_info_timer.resume()
+
+    def _on_modal_closed(self, _result=None):
+        self._resume_system_updates()
 
     def update_status(self, text):
         self.query_one("#status-bar", Static).update(text)
@@ -329,7 +341,10 @@ class AIModelViewer(App):
                 self.update_status("Loading detailed model metadata...")
                 self.open_hf_detail_worker(selected_model)
             else:
-                self.push_screen(ModelDetailModal(selected_model))
+                self._pause_system_updates()
+                self.push_screen(
+                    ModelDetailModal(selected_model), self._on_modal_closed
+                )
 
     @work(thread=True)
     def open_hf_detail_worker(self, selected_model):
@@ -349,7 +364,8 @@ class AIModelViewer(App):
                     self.all_results[idx] = enriched_model
                     break
             self.refresh_table()
-        self.push_screen(ModelDetailModal(enriched_model))
+        self._pause_system_updates()
+        self.push_screen(ModelDetailModal(enriched_model), self._on_modal_closed)
         self.update_status("Detailed metadata loaded.")
 
     @work(thread=True)
