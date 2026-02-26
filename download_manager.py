@@ -27,6 +27,6 @@ def build_download_command(model):
 
 
 def download_target_id(model):
-    source = model.get("source", "unknown")
-    identifier = model.get("id") or model.get("name") or "unknown"
+    source = str(model.get("source", "unknown")).strip().lower()
+    identifier = str(model.get("id") or model.get("name") or "unknown").strip().lower()
     return f"{source}:{identifier}"

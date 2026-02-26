@@ -519,8 +519,13 @@ class AIModelViewer(App):
         target_id = download_target_id(model)
         try:
             response = create_job(model)
-            _ = response.get("job")
-            self.update_status(f"Download queued: {model.get('name', target_id)}")
+            queued = bool(response.get("queued"))
+            if queued:
+                self.update_status(f"Download queued: {model.get('name', target_id)}")
+            else:
+                self.update_status(
+                    f"Download already active: {model.get('name', target_id)}"
+                )
             self.sync_download_jobs_from_service(force=True)
         except Exception as exc:
             self.update_status(f"Failed to queue download: {exc}")

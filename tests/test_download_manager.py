@@ -34,5 +34,12 @@ def test_build_download_command_rejects_unknown_source():
 def test_download_target_id_prefers_id():
     assert (
         download_target_id({"source": "Hugging Face", "id": "foo/bar"})
-        == "Hugging Face:foo/bar"
+        == "hugging face:foo/bar"
+    )
+
+
+def test_download_target_id_normalizes_case_and_space():
+    assert (
+        download_target_id({"source": " Ollama ", "name": " Qwen3-Coder-Next "})
+        == "ollama:qwen3-coder-next"
     )

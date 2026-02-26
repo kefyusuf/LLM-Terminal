@@ -2,6 +2,7 @@ import json
 import re
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -232,6 +233,13 @@ class DownloadServiceState:
 STATE = DownloadServiceState()
 
 
+def _service_popen_kwargs():
+    kwargs = {}
+    if sys.platform.startswith("win"):
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return kwargs
+
+
 def _extract_progress(line):
     match = re.search(r"(\d{1,3})%", line)
     if not match:
@@ -273,6 +281,7 @@ def worker_loop():
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
+                **_service_popen_kwargs(),
             )
             STATE.set_process(target_id, process)
             start = time.monotonic()

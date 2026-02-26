@@ -29,6 +29,8 @@
 - Added an auto-started local download service with persistent job storage so downloads survive TUI restarts.
 - Enabled cancel actions for active jobs directly from the recent-downloads panel.
 - Stabilized recent-download row ordering during concurrent downloads to prevent visual row swapping.
+- Prevented Windows console pop-up for background download worker processes.
+- Improved duplicate-download feedback and normalized target IDs to enforce single active job per model.
 
 ## 0.1.0 - 2026-02-26
 
