@@ -141,6 +141,8 @@ class AIModelViewer(App):
         self.search_cache = {}
         self.search_cache_ttl_seconds = 90
         self.search_cache_max_entries = 20
+        self.search_cache_ram_threshold_gb = 1.0
+        self.search_cache_vram_threshold_gb = 1.0
 
     def compose(self) -> ComposeResult:
         yield SystemInfoWidget(id="header")
@@ -188,6 +190,7 @@ class AIModelViewer(App):
         if not query:
             return
         query_key = query.lower()
+        current_specs = self.monitor.get_specs()
         self.last_search_error = ""
         self.search_counter += 1
         self.active_search_id = self.search_counter
@@ -196,7 +199,7 @@ class AIModelViewer(App):
         table.loading = True
         self.update_status(f"Searching: {query}")
 
-        cached = self._get_cached_search(query_key)
+        cached = self._get_cached_search(query_key, current_specs)
         if cached:
             self.all_results = [item.copy() for item in cached["results"]]
             self.last_search_error = cached["error"]
@@ -206,7 +209,28 @@ class AIModelViewer(App):
 
         self.run_search_worker(query, query_key, self.active_search_id)
 
-    def _get_cached_search(self, query_key):
+    def _is_cache_compatible(self, current_specs, cached_specs):
+        if not cached_specs:
+            return True
+        if current_specs.get("has_gpu") != cached_specs.get("has_gpu"):
+            return False
+
+        ram_delta = abs(
+            current_specs.get("ram_free", 0.0) - cached_specs.get("ram_free", 0.0)
+        )
+        if ram_delta > self.search_cache_ram_threshold_gb:
+            return False
+
+        if current_specs.get("has_gpu"):
+            vram_delta = abs(
+                current_specs.get("vram_free", 0.0) - cached_specs.get("vram_free", 0.0)
+            )
+            if vram_delta > self.search_cache_vram_threshold_gb:
+                return False
+
+        return True
+
+    def _get_cached_search(self, query_key, current_specs):
         entry = self.search_cache.get(query_key)
         if not entry:
             return None
@@ -215,13 +239,22 @@ class AIModelViewer(App):
         if age > self.search_cache_ttl_seconds:
             self.search_cache.pop(query_key, None)
             return None
+        if not self._is_cache_compatible(current_specs, entry.get("specs")):
+            self.search_cache.pop(query_key, None)
+            return None
         return entry
 
     def _store_cached_search(self, query_key, results, error):
+        specs = self.monitor.get_specs()
         self.search_cache[query_key] = {
             "timestamp": time.monotonic(),
             "results": [item.copy() for item in results],
             "error": error,
+            "specs": {
+                "has_gpu": specs.get("has_gpu", False),
+                "ram_free": specs.get("ram_free", 0.0),
+                "vram_free": specs.get("vram_free", 0.0),
+            },
         }
         if len(self.search_cache) > self.search_cache_max_entries:
             oldest_key = min(

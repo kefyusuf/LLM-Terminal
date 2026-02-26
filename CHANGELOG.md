@@ -6,6 +6,7 @@
 - Removed per-model repository file listing and now select GGUF candidates from expanded sibling metadata.
 - Deferred exact Hugging Face file-size lookup to model-detail open for faster search listing.
 - Added short-TTL query-result cache in the app to speed repeated searches.
+- Added hardware-aware cache invalidation when free RAM/VRAM changes beyond threshold.
 
 ## 0.1.0 - 2026-02-26
 
