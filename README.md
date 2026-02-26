@@ -54,6 +54,11 @@ Release preflight check:
 python scripts/release_check.py
 ```
 
+## CI
+
+- Unit tests run on push and pull requests via `.github/workflows/ci.yml`.
+- Live platform checks are available from manual workflow dispatch with `run_live=true`.
+
 ## Current Limitations
 
 - Network/API failures are currently handled conservatively and may return fewer diagnostics than ideal.
