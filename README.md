@@ -59,3 +59,7 @@ python scripts/release_check.py
 - Network/API failures are currently handled conservatively and may return fewer diagnostics than ideal.
 - Ollama model discovery uses web-page parsing, so UI changes on ollama.com can affect results.
 - Hugging Face metadata lookups can be slow for large result sets.
+
+## Release Notes
+
+- See `CHANGELOG.md` for versioned release history.
