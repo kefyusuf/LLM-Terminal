@@ -160,7 +160,9 @@ class AIModelViewer(App):
         self.search_cache_max_entries = 20
         self.search_cache_ram_threshold_gb = 1.0
         self.search_cache_vram_threshold_gb = 1.0
-        self.system_info_timer = None
+        self.system_metrics_timer = None
+        self.ollama_status_timer = None
+        self.latest_specs = None
 
     def compose(self) -> ComposeResult:
         yield SystemInfoWidget(id="header")
@@ -210,27 +212,35 @@ class AIModelViewer(App):
             self.update_status(
                 "Ready. Ollama is not running; local install/runtime features are disabled."
             )
-        self.system_info_timer = self.set_interval(3.0, self.update_system_info)
-
-    def _pause_system_updates(self):
-        if self.system_info_timer:
-            self.system_info_timer.pause()
-
-    def _resume_system_updates(self):
-        if self.system_info_timer:
-            self.system_info_timer.resume()
-
-    def _on_modal_closed(self, _result=None):
-        self._resume_system_updates()
+        self.system_metrics_timer = self.set_interval(3.0, self.update_system_info)
+        self.ollama_status_timer = self.set_interval(0.5, self.poll_ollama_status)
 
     def update_status(self, text):
         self.query_one("#status-bar", Static).update(text)
 
     def update_system_info(self):
         specs = self.monitor.get_specs()
-        ollama_running = check_ollama_running()
-        self.ollama_running = ollama_running
-        self.query_one(SystemInfoWidget).update_info(specs, ollama_running)
+        self.latest_specs = specs
+        self.poll_ollama_status(refresh_only=True)
+
+    def poll_ollama_status(self, refresh_only=False):
+        running_now = check_ollama_running()
+        state_changed = running_now != self.ollama_running
+        self.ollama_running = running_now
+
+        specs = (
+            self.latest_specs
+            if self.latest_specs is not None
+            else self.monitor.get_specs()
+        )
+        self.query_one(SystemInfoWidget).update_info(specs, running_now)
+
+        if refresh_only or not state_changed:
+            return
+        if running_now:
+            self.update_status("Ollama started. Local runtime features enabled.")
+        else:
+            self.update_status("Ollama stopped. Local runtime features disabled.")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         query = event.value.strip()
@@ -347,10 +357,7 @@ class AIModelViewer(App):
                 self.update_status("Loading detailed model metadata...")
                 self.open_hf_detail_worker(selected_model)
             else:
-                self._pause_system_updates()
-                self.push_screen(
-                    ModelDetailModal(selected_model), self._on_modal_closed
-                )
+                self.push_screen(ModelDetailModal(selected_model))
 
     @work(thread=True)
     def open_hf_detail_worker(self, selected_model):
@@ -370,8 +377,7 @@ class AIModelViewer(App):
                     self.all_results[idx] = enriched_model
                     break
             self.refresh_table()
-        self._pause_system_updates()
-        self.push_screen(ModelDetailModal(enriched_model), self._on_modal_closed)
+        self.push_screen(ModelDetailModal(enriched_model))
         self.update_status("Detailed metadata loaded.")
 
     @work(thread=True)

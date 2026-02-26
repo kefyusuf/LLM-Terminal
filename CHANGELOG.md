@@ -15,6 +15,7 @@
 - Added provider-specific rate-limit and HTTP error messaging for Hugging Face and Ollama registry.
 - Surfaced startup hint when Ollama is not running and local runtime features are unavailable.
 - Clarified Ollama requirement in project documentation.
+- Added fast Ollama status polling so header state updates nearly instantly on start/stop.
 
 ## 0.1.0 - 2026-02-26
 
