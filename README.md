@@ -15,6 +15,7 @@ AI Model Explorer is a Textual-based terminal UI that helps you find local-LLM m
 - Track download state directly in the table (`Idle`, `Queued`, `Downloading`, `Completed`, `Failed`).
 - Cancel active downloads from the model detail popup when needed.
 - Keep active/recent downloads visible in a dedicated downloads panel across searches.
+- Use an auto-started local background download service so downloads continue independently from the TUI session.
 
 ## Requirements
 
@@ -48,6 +49,8 @@ pip install -r requirements-dev.txt
 ```bash
 python main.py
 ```
+
+The app auto-starts a local download service on `127.0.0.1:8765` when needed.
 
 ## Run Tests
 

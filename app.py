@@ -20,6 +20,7 @@ from textual.widgets import (
 
 from hardware import HardwareMonitor, check_ollama_running
 from download_manager import build_download_command, download_target_id
+from service_client import cancel_job, create_job, ensure_service_running, list_jobs
 from providers.hf_provider import enrich_hf_model_details, search_hf_models
 from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
 
@@ -149,6 +150,51 @@ class SystemInfoWidget(Static):
         self.update(text)
 
 
+class DownloadJobModal(ModalScreen):
+    CSS = """
+    DownloadJobModal {
+        align: center middle;
+        background: $background;
+    }
+    #job-modal {
+        width: 60%;
+        height: auto;
+        background: $surface;
+        border: round $accent;
+        padding: 1 2;
+    }
+    #job-title {
+        text-style: bold;
+        text-align: center;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(self, entry):
+        super().__init__()
+        self.entry = entry
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="job-modal"):
+            yield Label(f"Download: {self.entry.get('name', '-')}", id="job-title")
+            yield Label(f"Source: {self.entry.get('source', '-')}")
+            yield Label(f"Publisher: {self.entry.get('publisher', '-')}")
+            yield Label(f"Status: {self.entry.get('status', '-')}")
+            yield Label(f"Detail: {self.entry.get('detail', '-')}")
+            yield Label(f"Progress: {self.entry.get('progress', '-')}")
+            if self.entry.get("status") in {"queued", "running"}:
+                yield Button("Cancel Download", variant="warning", id="job-cancel-btn")
+            yield Button("Close", variant="error", id="job-close-btn")
+
+    @on(Button.Pressed, "#job-cancel-btn")
+    def cancel(self):
+        self.dismiss("cancel")
+
+    @on(Button.Pressed, "#job-close-btn")
+    def close(self):
+        self.dismiss()
+
+
 class AIModelViewer(App):
     CSS = """
     Screen { layout: vertical; padding: 1; }
@@ -256,6 +302,11 @@ class AIModelViewer(App):
             "Detail",
             "Updated",
         )
+        service_ok = ensure_service_running()
+        if not service_ok:
+            self.update_status("Download service is unavailable.")
+        else:
+            self.sync_download_jobs_from_service(force=True)
         self.refresh_download_history_table()
         self.last_download_history_refresh_at = time.monotonic()
         self.update_status("Ready. Enter a model query and press Enter.")
@@ -400,6 +451,18 @@ class AIModelViewer(App):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         data_table = getattr(event, "data_table", None)
+        if data_table is not None and data_table.id == "download-history-table":
+            target_id = str(event.row_key.value)
+            entry = self.download_registry.get(target_id)
+            if entry:
+                self.push_screen(
+                    DownloadJobModal(entry),
+                    lambda result, tid=target_id: self.on_download_job_modal_action(
+                        result, tid
+                    ),
+                )
+            return
+
         if data_table is not None and data_table.id != "results-table":
             return
         row_key = str(event.row_key.value)
@@ -421,33 +484,46 @@ class AIModelViewer(App):
     def open_model_detail_modal(self, model):
         self.push_screen(ModelDetailModal(model))
 
+    def on_download_job_modal_action(self, result, target_id):
+        if result != "cancel":
+            return
+        entry = self.download_registry.get(target_id)
+        if not entry:
+            self.update_status("Download entry not found.")
+            return
+        self.cancel_model_download(
+            {
+                "source": entry.get("source", "-"),
+                "name": entry.get("name", target_id),
+                "id": target_id.split(":", maxsplit=1)[1]
+                if ":" in target_id
+                else target_id,
+            }
+        )
+
     def cancel_model_download(self, model):
         target_id = download_target_id(model)
-        process = self.download_processes.get(target_id)
-        if process is None and target_id not in self.active_downloads:
-            self.update_status("No active download to cancel for selected model.")
-            return
-
-        self.cancelled_downloads.add(target_id)
-        if process is not None:
-            try:
-                process.terminate()
-            except OSError:
-                pass
-        self._set_download_state(target_id, "cancelled", "Canceled", "", model=model)
-        self.update_status(f"Cancel requested: {model.get('name', target_id)}")
+        try:
+            response = cancel_job(target_id)
+            _ = response.get("job")
+            self.update_status(f"Cancel requested: {model.get('name', target_id)}")
+            self.sync_download_jobs_from_service(force=True)
+        except Exception:
+            self.update_status("Failed to cancel download through service.")
 
     def start_model_download(self, model):
-        target_id = download_target_id(model)
-        if target_id in self.active_downloads:
-            self.update_status("Download already in progress for selected model.")
+        if not ensure_service_running():
+            self.update_status("Download service is unavailable.")
             return
 
-        self.active_downloads.add(target_id)
-        self.download_started_at[target_id] = time.monotonic()
-        self._set_download_state(target_id, "queued", "Queued", "", model=model)
-        self.update_status(f"Downloading: {model.get('name', target_id)}")
-        self.download_model_worker(model.copy(), target_id)
+        target_id = download_target_id(model)
+        try:
+            response = create_job(model)
+            _ = response.get("job")
+            self.update_status(f"Download queued: {model.get('name', target_id)}")
+            self.sync_download_jobs_from_service(force=True)
+        except Exception as exc:
+            self.update_status(f"Failed to queue download: {exc}")
 
     @work(thread=True)
     def download_model_worker(self, model, target_id):
@@ -608,6 +684,55 @@ class AIModelViewer(App):
             ]:
                 self.download_registry.pop(key, None)
 
+    def sync_download_jobs_from_service(self, force=False):
+        try:
+            jobs = list_jobs(limit=self.download_history_limit)
+        except Exception:
+            return
+
+        running_targets = set()
+        for job in jobs:
+            target_id = job.get("target_id")
+            if not target_id:
+                continue
+            raw_status = job.get("status", "idle")
+            mapped_status = {
+                "running": "downloading",
+                "queued": "queued",
+                "completed": "completed",
+                "failed": "failed",
+                "cancelled": "cancelled",
+            }.get(raw_status, "idle")
+            label = {
+                "downloading": "Downloading",
+                "queued": "Queued",
+                "completed": "Completed",
+                "failed": "Failed",
+                "cancelled": "Canceled",
+                "idle": "Idle",
+            }[mapped_status]
+
+            detail = job.get("progress") or job.get("detail") or ""
+            self._record_download_entry(
+                target_id,
+                model={
+                    "source": job.get("source", "-"),
+                    "publisher": job.get("publisher", "-"),
+                    "name": job.get("name", target_id),
+                },
+                state=mapped_status,
+                label=label,
+                detail=detail,
+            )
+            if mapped_status in {"queued", "downloading"}:
+                running_targets.add(target_id)
+
+        self.active_downloads = running_targets
+        self._ensure_download_fields()
+        if force:
+            self.refresh_table()
+            self.refresh_download_history_table()
+
     def refresh_download_history_table(self):
         table = self.query_one("#download-history-table", DataTable)
         table.clear()
@@ -723,47 +848,18 @@ class AIModelViewer(App):
                 item.setdefault("download_detail", "")
 
     def refresh_download_progress(self):
+        self.sync_download_jobs_from_service(force=False)
         if not self.active_downloads:
             if self.download_history_refresh_pending:
                 self.request_download_history_refresh()
             return
         self.download_spinner_index += 1
-        now = time.monotonic()
-        history_updated = False
-        for target_id in list(self.active_downloads):
-            model = self._find_model_by_target_id(target_id)
-            entry = self.download_registry.get(target_id)
-            if entry and entry.get("state") != "downloading":
-                continue
-            detail = ""
-            if model:
-                detail = model.get("download_detail", "")
-            elif entry:
-                detail = entry.get("detail", "")
-            if "%" in detail:
-                continue
-            started = self.download_started_at.get(target_id)
-            if started is None:
-                continue
-            elapsed = int(now - started)
-            next_detail = f"{elapsed}s"
-            if detail != next_detail:
-                if model:
-                    model["download_detail"] = next_detail
-                self._record_download_entry(
-                    target_id,
-                    model=model,
-                    state="downloading",
-                    label="Downloading",
-                    detail=next_detail,
-                )
-                history_updated = True
-
-        if history_updated or any(
+        if any(
             self.download_registry.get(target_id, {}).get("state") == "downloading"
             for target_id in self.active_downloads
         ):
             self.request_download_history_refresh()
+            self.refresh_table()
 
     def on_download_progress(self, target_id, state, label, detail):
         self._set_download_state(

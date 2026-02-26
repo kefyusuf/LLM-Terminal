@@ -26,6 +26,8 @@
 - Added persistent recent-downloads panel so previous download states remain visible across new searches.
 - Reduced live download UI refresh pressure on the main results table to preserve smooth scrolling.
 - Throttled recent-downloads panel refresh frequency to keep scrolling responsive during active downloads.
+- Added an auto-started local download service with persistent job storage so downloads survive TUI restarts.
+- Enabled cancel actions for active jobs directly from the recent-downloads panel.
 
 ## 0.1.0 - 2026-02-26
 
