@@ -16,6 +16,7 @@ AI Model Explorer is a Textual-based terminal UI that helps you find local-LLM m
 - Cancel active downloads from the model detail popup when needed.
 - Keep active/recent downloads visible in a dedicated downloads panel across searches.
 - Use an auto-started local background download service so downloads continue independently from the TUI session.
+- Remove completed/failed/canceled download entries from Recent Downloads via a delete action.
 
 ## Requirements
 

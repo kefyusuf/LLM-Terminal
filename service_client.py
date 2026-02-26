@@ -141,3 +141,9 @@ def cancel_job(target_id):
     return _request(
         "POST", "/jobs/cancel", payload={"target_id": target_id}, timeout=2.0
     )
+
+
+def delete_job(target_id):
+    return _request(
+        "POST", "/jobs/delete", payload={"target_id": target_id}, timeout=2.0
+    )

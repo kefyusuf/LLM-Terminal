@@ -44,6 +44,8 @@
 - Improved quantization inference from model names and removed Ollama hardcoded `Q4_0` display.
 - Marked estimated Hugging Face sizes with `~` and clarified results table columns as estimated runtime/fit.
 - Added a dedicated size-confidence column (`Exact` vs `Estimated`) in the main results table.
+- Added delete-entry action for non-active download records in Recent Downloads.
+- Added service `/jobs/delete` endpoint with active-job protection.
 
 ## 0.1.0 - 2026-02-26
 

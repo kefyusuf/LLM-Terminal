@@ -23,6 +23,7 @@ from download_manager import build_download_command, download_target_id
 from service_client import (
     cancel_job,
     create_job,
+    delete_job,
     ensure_service_running,
     get_service_health,
     get_active_download_debug,
@@ -192,6 +193,8 @@ class DownloadJobModal(ModalScreen):
             yield Label(f"Progress: {progress}")
             if state in {"queued", "downloading", "running"}:
                 yield Button("Cancel Download", variant="warning", id="job-cancel-btn")
+            else:
+                yield Button("Delete Entry", variant="error", id="job-delete-btn")
             yield Button("Close", variant="error", id="job-close-btn")
 
     @on(Button.Pressed, "#job-cancel-btn")
@@ -201,6 +204,10 @@ class DownloadJobModal(ModalScreen):
     @on(Button.Pressed, "#job-close-btn")
     def close(self):
         self.dismiss()
+
+    @on(Button.Pressed, "#job-delete-btn")
+    def delete(self):
+        self.dismiss("delete")
 
 
 class AIModelViewer(App):
@@ -498,7 +505,10 @@ class AIModelViewer(App):
         self.push_screen(ModelDetailModal(model))
 
     def on_download_job_modal_action(self, result, target_id):
-        if result != "cancel":
+        if result not in {"cancel", "delete"}:
+            return
+        if result == "delete":
+            self.delete_download_entry(target_id)
             return
         entry = self.download_registry.get(target_id)
         if not entry:
@@ -523,6 +533,42 @@ class AIModelViewer(App):
             self.sync_download_jobs_from_service(force=True)
         except Exception:
             self.update_status("Failed to cancel download through service.")
+
+    def delete_download_entry(self, target_id):
+        try:
+            delete_job(target_id)
+        except Exception:
+            self.update_status("Failed to delete download entry.")
+            return
+
+        deleted_entry = self.download_registry.pop(target_id, None)
+        if deleted_entry is not None:
+            source_key = str(deleted_entry.get("source", "")).strip().lower()
+            name_key = str(deleted_entry.get("name", "")).strip().lower()
+        else:
+            source_key = ""
+            name_key = ""
+
+        for item in self.all_results:
+            item_target = download_target_id(item)
+            if item_target == target_id:
+                item["download_state"] = "idle"
+                item["download_label"] = "Idle"
+                item["download_detail"] = ""
+                continue
+            if (
+                source_key
+                and name_key
+                and str(item.get("source", "")).strip().lower() == source_key
+                and str(item.get("name", "")).strip().lower() == name_key
+            ):
+                item["download_state"] = "idle"
+                item["download_label"] = "Idle"
+                item["download_detail"] = ""
+
+        self.refresh_table()
+        self.refresh_download_history_table()
+        self.update_status("Download entry deleted.")
 
     def start_model_download(self, model):
         if not ensure_service_running():

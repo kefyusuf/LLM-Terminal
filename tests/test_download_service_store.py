@@ -97,3 +97,29 @@ def test_recover_orphaned_running_jobs_marks_failed(tmp_path):
     assert jobs[0] is not None
     assert jobs[0]["status"] == "failed"
     assert "service restarted" in jobs[0]["detail"]
+
+
+def test_delete_job_removes_non_active_entry(tmp_path):
+    store = DownloadStore(tmp_path / "jobs.db")
+    model = {"source": "Ollama", "name": "qwen2", "publisher": "ollama"}
+    job, _ = store.upsert_job(model)
+    assert job is not None
+
+    store.update_job(job["target_id"], status="completed", detail="Completed")
+    deleted, reason = store.delete_job(job["target_id"])
+
+    assert deleted is True
+    assert reason == "deleted"
+    assert store.get_job_by_target(job["target_id"]) is None
+
+
+def test_delete_job_rejects_active_entry(tmp_path):
+    store = DownloadStore(tmp_path / "jobs.db")
+    job, _ = store.upsert_job(
+        {"source": "Ollama", "name": "qwen3", "publisher": "ollama"}
+    )
+    assert job is not None
+
+    deleted, reason = store.delete_job(job["target_id"])
+    assert deleted is False
+    assert reason == "active"

@@ -256,6 +256,18 @@ class DownloadStore:
             return []
         return json.loads(row[0])
 
+    def delete_job(self, target_id):
+        with self.lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT status FROM jobs WHERE target_id = ?", (target_id,)
+            ).fetchone()
+            if row is None:
+                return False, "not_found"
+            if row["status"] in {"queued", "running"}:
+                return False, "active"
+            conn.execute("DELETE FROM jobs WHERE target_id = ?", (target_id,))
+        return True, "deleted"
+
 
 class DownloadServiceState:
     def __init__(self):
@@ -530,6 +542,24 @@ class Handler(BaseHTTPRequestHandler):
                 )
 
             self._json_response(200, {"job": job})
+            return
+
+        if self.path == "/jobs/delete":
+            payload = self._read_json()
+            target_id = payload.get("target_id")
+            if not target_id:
+                self._json_response(400, {"error": "target_id is required"})
+                return
+
+            deleted, reason = STATE.store.delete_job(target_id)
+            if not deleted and reason == "not_found":
+                self._json_response(404, {"error": "job not found"})
+                return
+            if not deleted and reason == "active":
+                self._json_response(409, {"error": "cannot delete active job"})
+                return
+
+            self._json_response(200, {"ok": True})
             return
 
         if self.path == "/shutdown":
