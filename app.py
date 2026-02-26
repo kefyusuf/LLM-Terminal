@@ -20,7 +20,13 @@ from textual.widgets import (
 
 from hardware import HardwareMonitor, check_ollama_running
 from download_manager import build_download_command, download_target_id
-from service_client import cancel_job, create_job, ensure_service_running, list_jobs
+from service_client import (
+    cancel_job,
+    create_job,
+    ensure_service_running,
+    get_active_download_debug,
+    list_jobs,
+)
 from providers.hf_provider import enrich_hf_model_details, search_hf_models
 from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
 
@@ -205,6 +211,7 @@ class AIModelViewer(App):
     #gem-toggle { margin-bottom: 1; }
     #results-table { height: 1fr; border: round grey; }
     #downloads-label { margin-top: 1; }
+    #downloads-debug { color: $text-muted; margin-bottom: 1; }
     #download-history-table { height: 8; border: round grey; }
     #status-bar { height: 1; color: $text-muted; margin-top: 1; }
     """
@@ -272,6 +279,7 @@ class AIModelViewer(App):
         )
         yield DataTable(id="results-table", cursor_type="row")
         yield Label("Recent Downloads", id="downloads-label")
+        yield Static("Workers: - | Duplicates: -", id="downloads-debug")
         yield DataTable(id="download-history-table", cursor_type="row")
         yield Static("", id="status-bar")
         yield Footer()
@@ -866,6 +874,7 @@ class AIModelViewer(App):
 
     def refresh_download_progress(self):
         self.sync_download_jobs_from_service(force=False)
+        self.refresh_download_debug()
         if not self.active_downloads:
             if self.download_history_refresh_pending:
                 self.request_download_history_refresh()
@@ -877,6 +886,20 @@ class AIModelViewer(App):
         ):
             self.request_download_history_refresh()
             self.refresh_table()
+
+    def refresh_download_debug(self):
+        try:
+            debug = get_active_download_debug()
+            count = debug.get("count", 0)
+            has_duplicates = bool(debug.get("has_duplicates", False))
+            dup_text = "yes" if has_duplicates else "no"
+            self.query_one("#downloads-debug", Static).update(
+                f"Workers: {count} | Duplicates: {dup_text}"
+            )
+        except Exception:
+            self.query_one("#downloads-debug", Static).update(
+                "Workers: unavailable | Duplicates: unknown"
+            )
 
     def on_download_progress(self, target_id, state, label, detail):
         self._set_download_state(

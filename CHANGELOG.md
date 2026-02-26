@@ -32,6 +32,7 @@
 - Prevented Windows console pop-up for background download worker processes.
 - Improved duplicate-download feedback and normalized target IDs to enforce single active job per model.
 - Added a service debug endpoint for active background targets and duplicate-detection visibility.
+- Surfaced active-worker and duplicate-debug status directly in the downloads section of the TUI.
 
 ## 0.1.0 - 2026-02-26
 
