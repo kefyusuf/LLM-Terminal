@@ -229,6 +229,10 @@ class DownloadServiceState:
         with self.running_lock:
             self.running_processes.pop(target_id, None)
 
+    def snapshot_active_targets(self):
+        with self.running_lock:
+            return list(self.running_processes.keys())
+
 
 STATE = DownloadServiceState()
 
@@ -238,6 +242,10 @@ def _service_popen_kwargs():
     if sys.platform.startswith("win"):
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     return kwargs
+
+
+def _has_duplicates(values):
+    return len(values) != len(set(values))
 
 
 def _extract_progress(line):
@@ -383,6 +391,18 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self._json_response(200, {"ok": True})
+            return
+
+        if parsed.path == "/debug/active":
+            active_targets = STATE.snapshot_active_targets()
+            self._json_response(
+                200,
+                {
+                    "active_targets": active_targets,
+                    "count": len(active_targets),
+                    "has_duplicates": _has_duplicates(active_targets),
+                },
+            )
             return
 
         if parsed.path == "/jobs":

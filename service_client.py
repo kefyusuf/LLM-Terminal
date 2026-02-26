@@ -40,22 +40,22 @@ def ensure_service_running():
         return True
 
     script_path = Path(__file__).resolve().with_name("download_service.py")
-    creationflags = 0
-    popen_kwargs = {
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "stdin": subprocess.DEVNULL,
-    }
-
     if sys.platform.startswith("win"):
         detached = getattr(subprocess, "DETACHED_PROCESS", 0)
         new_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        creationflags = detached | new_group
-        popen_kwargs["creationflags"] = creationflags
+        subprocess.Popen(
+            [sys.executable, str(script_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=detached | new_group,
+        )
     else:
-        popen_kwargs["start_new_session"] = True
-
-    subprocess.Popen([sys.executable, str(script_path)], **popen_kwargs)
+        subprocess.Popen(
+            [sys.executable, str(script_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
     deadline = time.time() + 6.0
     while time.time() < deadline:
@@ -68,6 +68,10 @@ def ensure_service_running():
 def list_jobs(limit=50):
     data = _request("GET", f"/jobs?limit={int(limit)}", timeout=2.0)
     return data.get("jobs", [])
+
+
+def get_active_download_debug():
+    return _request("GET", "/debug/active", timeout=2.0)
 
 
 def create_job(model):
