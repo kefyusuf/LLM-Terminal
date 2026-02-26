@@ -729,6 +729,11 @@ class AIModelViewer(App):
                 "failed": "failed",
                 "cancelled": "cancelled",
             }.get(raw_status, "idle")
+            if raw_status == "running" and (
+                bool(job.get("cancel_requested"))
+                or str(job.get("detail", "")).lower().startswith("cancel")
+            ):
+                mapped_status = "downloading"
             label = {
                 "downloading": "Downloading",
                 "queued": "Queued",
@@ -737,6 +742,11 @@ class AIModelViewer(App):
                 "cancelled": "Canceled",
                 "idle": "Idle",
             }[mapped_status]
+            if raw_status == "running" and (
+                bool(job.get("cancel_requested"))
+                or str(job.get("detail", "")).lower().startswith("cancel")
+            ):
+                label = "Canceling"
 
             detail = job.get("progress") or job.get("detail") or ""
             self._record_download_entry(

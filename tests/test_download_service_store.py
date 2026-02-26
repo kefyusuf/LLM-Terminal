@@ -66,3 +66,34 @@ def test_normalize_target_ids_merges_legacy_casing_duplicates(tmp_path):
     assert len(jobs) == 1
     assert jobs[0] is not None
     assert jobs[0]["target_id"] == "ollama:qwen3-coder-next"
+
+
+def test_recover_orphaned_running_jobs_marks_failed(tmp_path):
+    store = DownloadStore(tmp_path / "jobs.db")
+    with store._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO jobs (
+                target_id, source, publisher, name, command_json, status,
+                detail, progress, created_at, updated_at, cancel_requested, return_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+            """,
+            (
+                "ollama:qwen3",
+                "ollama",
+                "ollama",
+                "qwen3",
+                "[]",
+                "running",
+                "Downloading",
+                "50%",
+                3.0,
+                3.0,
+            ),
+        )
+
+    store.recover_orphaned_running_jobs()
+    jobs = store.list_jobs(limit=10)
+    assert jobs[0] is not None
+    assert jobs[0]["status"] == "failed"
+    assert "service restarted" in jobs[0]["detail"]

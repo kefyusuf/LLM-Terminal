@@ -37,6 +37,8 @@
 - Added legacy target-id normalization migration and fallback row matching for pre-normalized jobs.
 - Fixed recent-download modal cancel visibility by aligning modal state fields with registry data.
 - Kept search results stable during active downloads by showing state-only labels and avoiding per-tick table refresh.
+- Added orphaned-running job recovery after service restarts to prevent stuck non-cancelable states.
+- Improved cancel handling with terminate+kill fallback and explicit cancel-requested status updates.
 
 ## 0.1.0 - 2026-02-26
 

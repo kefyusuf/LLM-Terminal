@@ -83,6 +83,19 @@ class DownloadStore:
             for row_id in delete_ids:
                 conn.execute("DELETE FROM jobs WHERE id = ?", (row_id,))
 
+    def recover_orphaned_running_jobs(self):
+        now = time.time()
+        with self.lock, self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE jobs
+                SET status = 'failed', detail = 'service restarted during download',
+                    progress = '', cancel_requested = 0, updated_at = ?
+                WHERE status = 'running'
+                """,
+                (now,),
+            )
+
     def _row_to_dict(self, row):
         if row is None:
             return None
@@ -247,6 +260,7 @@ class DownloadServiceState:
     def __init__(self):
         self.store = DownloadStore(DB_PATH)
         self.store.normalize_target_ids()
+        self.store.recover_orphaned_running_jobs()
         self.running_processes = {}
         self.running_lock = threading.Lock()
         self.stop_event = threading.Event()
@@ -484,9 +498,27 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
 
-            if job.get("status") == "queued":
+                try:
+                    process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                    try:
+                        process.wait(timeout=1.0)
+                    except subprocess.TimeoutExpired:
+                        pass
+
+            if job.get("status") in {"queued", "running"} and process is None:
                 job = STATE.store.update_job(
                     target_id, status="cancelled", detail="Canceled", progress=""
+                )
+            elif job.get("status") == "running":
+                job = STATE.store.update_job(
+                    target_id,
+                    status="running",
+                    detail="Cancel requested",
                 )
 
             self._json_response(200, {"job": job})
