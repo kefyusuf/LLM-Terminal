@@ -2,7 +2,11 @@ import sys
 
 import pytest
 
-from download_manager import build_download_command, download_target_id
+from download_manager import (
+    build_download_command,
+    download_target_id,
+    normalize_target_id,
+)
 
 
 def test_build_download_command_hf():
@@ -43,3 +47,7 @@ def test_download_target_id_normalizes_case_and_space():
         download_target_id({"source": " Ollama ", "name": " Qwen3-Coder-Next "})
         == "ollama:qwen3-coder-next"
     )
+
+
+def test_normalize_target_id_handles_missing_source_prefix():
+    assert normalize_target_id("Qwen3") == "unknown:qwen3"

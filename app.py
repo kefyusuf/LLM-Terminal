@@ -24,6 +24,7 @@ from service_client import (
     cancel_job,
     create_job,
     ensure_service_running,
+    get_service_health,
     get_active_download_debug,
     list_jobs,
 )
@@ -312,7 +313,9 @@ class AIModelViewer(App):
         )
         service_ok = ensure_service_running()
         if not service_ok:
-            self.update_status("Download service is unavailable.")
+            self.update_status(
+                "Download service is unavailable or outdated. Restart the app/service."
+            )
         else:
             self.sync_download_jobs_from_service(force=True)
         self.refresh_download_history_table()
@@ -709,6 +712,14 @@ class AIModelViewer(App):
             target_id = job.get("target_id")
             if not target_id:
                 continue
+            target_id = download_target_id(
+                {
+                    "source": job.get("source", "unknown"),
+                    "id": target_id.split(":", maxsplit=1)[1]
+                    if ":" in target_id
+                    else target_id,
+                }
+            )
             raw_status = job.get("status", "idle")
             mapped_status = {
                 "running": "downloading",
@@ -863,6 +874,16 @@ class AIModelViewer(App):
         for item in self.all_results:
             target_id = download_target_id(item)
             entry = self.download_registry.get(target_id)
+            if entry is None:
+                source_key = str(item.get("source", "")).strip().lower()
+                name_key = str(item.get("name", "")).strip().lower()
+                for value in self.download_registry.values():
+                    if (
+                        str(value.get("source", "")).strip().lower() == source_key
+                        and str(value.get("name", "")).strip().lower() == name_key
+                    ):
+                        entry = value
+                        break
             if entry:
                 item["download_state"] = entry.get("state", "idle")
                 item["download_label"] = entry.get("label", "Idle")
@@ -897,9 +918,16 @@ class AIModelViewer(App):
                 f"Workers: {count} | Duplicates: {dup_text}"
             )
         except Exception:
-            self.query_one("#downloads-debug", Static).update(
-                "Workers: unavailable | Duplicates: unknown"
-            )
+            try:
+                health = get_service_health()
+                version = health.get("version", "unknown")
+                self.query_one("#downloads-debug", Static).update(
+                    f"Workers: legacy service ({version}) | Duplicates: unknown"
+                )
+            except Exception:
+                self.query_one("#downloads-debug", Static).update(
+                    "Workers: unavailable | Duplicates: unknown"
+                )
 
     def on_download_progress(self, target_id, state, label, detail):
         self._set_download_state(

@@ -1,6 +1,16 @@
 import sys
 
 
+def normalize_target_id(value):
+    raw = str(value or "unknown:unknown").strip().lower()
+    if ":" not in raw:
+        return f"unknown:{raw}"
+    source, identifier = raw.split(":", maxsplit=1)
+    source = source.strip() or "unknown"
+    identifier = identifier.strip() or "unknown"
+    return f"{source}:{identifier}"
+
+
 def build_download_command(model):
     source = model.get("source")
     if source == "Hugging Face":
@@ -29,4 +39,4 @@ def build_download_command(model):
 def download_target_id(model):
     source = str(model.get("source", "unknown")).strip().lower()
     identifier = str(model.get("id") or model.get("name") or "unknown").strip().lower()
-    return f"{source}:{identifier}"
+    return normalize_target_id(f"{source}:{identifier}")

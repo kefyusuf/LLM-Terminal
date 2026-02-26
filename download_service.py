@@ -9,12 +9,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from download_manager import build_download_command, download_target_id
+from download_manager import (
+    build_download_command,
+    download_target_id,
+    normalize_target_id,
+)
 
 
 DB_PATH = Path(__file__).resolve().with_name("downloads.db")
 HOST = "127.0.0.1"
 PORT = 8765
+SERVICE_VERSION = "1.1"
 
 
 class DownloadStore:
@@ -49,6 +54,34 @@ class DownloadStore:
                 )
                 """
             )
+
+    def normalize_target_ids(self):
+        with self.lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, target_id, updated_at FROM jobs ORDER BY updated_at DESC, id DESC"
+            ).fetchall()
+
+            keep_by_target = {}
+            delete_ids = []
+            update_rows = []
+
+            for row in rows:
+                row_id = row["id"]
+                normalized = normalize_target_id(row["target_id"])
+                if normalized in keep_by_target:
+                    delete_ids.append(row_id)
+                    continue
+                keep_by_target[normalized] = row_id
+                if normalized != row["target_id"]:
+                    update_rows.append((normalized, row_id))
+
+            for normalized, row_id in update_rows:
+                conn.execute(
+                    "UPDATE jobs SET target_id = ? WHERE id = ?", (normalized, row_id)
+                )
+
+            for row_id in delete_ids:
+                conn.execute("DELETE FROM jobs WHERE id = ?", (row_id,))
 
     def _row_to_dict(self, row):
         if row is None:
@@ -213,6 +246,7 @@ class DownloadStore:
 class DownloadServiceState:
     def __init__(self):
         self.store = DownloadStore(DB_PATH)
+        self.store.normalize_target_ids()
         self.running_processes = {}
         self.running_lock = threading.Lock()
         self.stop_event = threading.Event()
@@ -390,7 +424,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
-            self._json_response(200, {"ok": True})
+            self._json_response(200, {"ok": True, "version": SERVICE_VERSION})
             return
 
         if parsed.path == "/debug/active":

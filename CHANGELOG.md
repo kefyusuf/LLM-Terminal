@@ -33,6 +33,8 @@
 - Improved duplicate-download feedback and normalized target IDs to enforce single active job per model.
 - Added a service debug endpoint for active background targets and duplicate-detection visibility.
 - Surfaced active-worker and duplicate-debug status directly in the downloads section of the TUI.
+- Added download service version reporting and compatibility checks.
+- Added legacy target-id normalization migration and fallback row matching for pre-normalized jobs.
 
 ## 0.1.0 - 2026-02-26
 

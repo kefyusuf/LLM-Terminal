@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 SERVICE_HOST = "127.0.0.1"
 SERVICE_PORT = 8765
 SERVICE_BASE_URL = f"http://{SERVICE_HOST}:{SERVICE_PORT}"
+MIN_SERVICE_VERSION = "1.1"
 
 
 def _request(method, path, payload=None, timeout=2.0):
@@ -35,9 +36,22 @@ def is_service_running():
         return False
 
 
+def get_service_health():
+    return _request("GET", "/health", timeout=1.0)
+
+
+def is_service_compatible(health):
+    version = str(health.get("version", "0"))
+    return version >= MIN_SERVICE_VERSION
+
+
 def ensure_service_running():
     if is_service_running():
-        return True
+        try:
+            health = get_service_health()
+            return is_service_compatible(health)
+        except (URLError, HTTPError, TimeoutError, ValueError):
+            return False
 
     script_path = Path(__file__).resolve().with_name("download_service.py")
     if sys.platform.startswith("win"):
