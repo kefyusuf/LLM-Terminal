@@ -1,6 +1,8 @@
 import time
 import subprocess
 import re
+import json
+from urllib.error import HTTPError
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -199,7 +201,18 @@ class DownloadJobModal(ModalScreen):
 
     @on(Button.Pressed, "#job-cancel-btn")
     def cancel(self):
-        self.dismiss("cancel")
+        cancel_fn = getattr(self.app, "cancel_model_download", None)
+        if callable(cancel_fn):
+            cancel_fn(
+                {
+                    "source": self.entry.get("source", "-"),
+                    "name": self.entry.get("name", "-"),
+                    "id": self.entry.get("target_id", "").split(":", maxsplit=1)[1]
+                    if ":" in str(self.entry.get("target_id", ""))
+                    else self.entry.get("target_id", ""),
+                }
+            )
+        self.dismiss()
 
     @on(Button.Pressed, "#job-close-btn")
     def close(self):
@@ -207,7 +220,10 @@ class DownloadJobModal(ModalScreen):
 
     @on(Button.Pressed, "#job-delete-btn")
     def delete(self):
-        self.dismiss("delete")
+        delete_fn = getattr(self.app, "delete_download_entry", None)
+        if callable(delete_fn):
+            delete_fn(str(self.entry.get("target_id", "")))
+        self.dismiss()
 
 
 class AIModelViewer(App):
@@ -475,12 +491,7 @@ class AIModelViewer(App):
             target_id = str(event.row_key.value)
             entry = self.download_registry.get(target_id)
             if entry:
-                self.push_screen(
-                    DownloadJobModal(entry),
-                    lambda result, tid=target_id: self.on_download_job_modal_action(
-                        result, tid
-                    ),
-                )
+                self.push_screen(DownloadJobModal(entry))
             return
 
         if data_table is not None and data_table.id != "results-table":
@@ -505,24 +516,7 @@ class AIModelViewer(App):
         self.push_screen(ModelDetailModal(model))
 
     def on_download_job_modal_action(self, result, target_id):
-        if result not in {"cancel", "delete"}:
-            return
-        if result == "delete":
-            self.delete_download_entry(target_id)
-            return
-        entry = self.download_registry.get(target_id)
-        if not entry:
-            self.update_status("Download entry not found.")
-            return
-        self.cancel_model_download(
-            {
-                "source": entry.get("source", "-"),
-                "name": entry.get("name", target_id),
-                "id": target_id.split(":", maxsplit=1)[1]
-                if ":" in target_id
-                else target_id,
-            }
-        )
+        _ = (result, target_id)
 
     def cancel_model_download(self, model):
         target_id = download_target_id(model)
@@ -531,12 +525,35 @@ class AIModelViewer(App):
             _ = response.get("job")
             self.update_status(f"Cancel requested: {model.get('name', target_id)}")
             self.sync_download_jobs_from_service(force=True)
+        except HTTPError as exc:
+            detail = "Failed to cancel download through service."
+            try:
+                payload = json.loads(exc.read().decode("utf-8"))
+                error_text = payload.get("error")
+                if error_text:
+                    detail = f"Cancel failed: {error_text}"
+            except Exception:
+                pass
+            self.update_status(detail)
         except Exception:
             self.update_status("Failed to cancel download through service.")
 
     def delete_download_entry(self, target_id):
         try:
             delete_job(target_id)
+        except HTTPError as exc:
+            detail = "Failed to delete download entry."
+            try:
+                payload = json.loads(exc.read().decode("utf-8"))
+                error_text = payload.get("error")
+                if error_text == "cannot delete active job":
+                    detail = "Cannot delete active job. Cancel it first."
+                elif error_text:
+                    detail = f"Delete failed: {error_text}"
+            except Exception:
+                pass
+            self.update_status(detail)
+            return
         except Exception:
             self.update_status("Failed to delete download entry.")
             return

@@ -46,6 +46,8 @@
 - Added a dedicated size-confidence column (`Exact` vs `Estimated`) in the main results table.
 - Added delete-entry action for non-active download records in Recent Downloads.
 - Added service `/jobs/delete` endpoint with active-job protection.
+- Fixed recent-download modal actions to call app handlers directly for reliable cancel/delete behavior.
+- Added detailed user-visible delete/cancel error messages from service responses.
 
 ## 0.1.0 - 2026-02-26
 
