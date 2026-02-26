@@ -118,6 +118,7 @@ class AIModelViewer(App):
     Input { width: 100%; margin-bottom: 1; }
     RadioSet { layout: horizontal; width: 100%; height: 3; border: none; align: center middle; margin-bottom: 1; }
     DataTable { height: 1fr; border: round grey; }
+    #status-bar { height: 1; color: $text-muted; margin-top: 1; }
     """
 
     BINDINGS = [
@@ -148,6 +149,7 @@ class AIModelViewer(App):
             yield RadioButton("Ollama", id="filter-ollama")
             yield RadioButton("Hugging Face", id="filter-hf")
         yield DataTable(id="results-table", cursor_type="row")
+        yield Static("", id="status-bar")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -165,8 +167,12 @@ class AIModelViewer(App):
             "Durum",
             "Boyut",
         )
+        self.update_status("Hazır. Model araması için yazıp Enter'a basın.")
         self.update_system_info()
         self.set_interval(3.0, self.update_system_info)
+
+    def update_status(self, text):
+        self.query_one("#status-bar", Static).update(text)
 
     def update_system_info(self):
         specs = self.monitor.get_specs()
@@ -183,6 +189,7 @@ class AIModelViewer(App):
         table = self.query_one(DataTable)
         table.clear()
         table.loading = True
+        self.update_status(f"Aranıyor: {query}")
         self.run_search_worker(query, self.active_search_id)
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
@@ -236,11 +243,18 @@ class AIModelViewer(App):
         table.loading = False
         self.refresh_table()
 
+        if table.row_count > 0:
+            self.update_status(f"{table.row_count} sonuç listelendi.")
+        elif self.last_search_error:
+            self.update_status("Arama sırasında hata oluştu. Bağlantıyı kontrol edin.")
+        else:
+            self.update_status("Sonuç bulunamadı.")
+
         if table.row_count == 0 and self.last_search_error:
             table.add_row(
                 "[red]![/red]",
-                "System",
-                "Search error",
+                "Sistem",
+                "Arama hatası",
                 "-",
                 "-",
                 f"[red]{self.last_search_error[:40]}[/red]",
