@@ -993,9 +993,11 @@ class AIModelViewer(App):
             debug = get_active_download_debug()
             count = debug.get("count", 0)
             has_duplicates = bool(debug.get("has_duplicates", False))
+            worker_alive = bool(debug.get("worker_alive", True))
             dup_text = "yes" if has_duplicates else "no"
+            worker_text = "up" if worker_alive else "down"
             self.query_one("#downloads-debug", Static).update(
-                f"Workers: {count} | Duplicates: {dup_text}"
+                f"Workers: {count} ({worker_text}) | Duplicates: {dup_text}"
             )
         except Exception:
             try:

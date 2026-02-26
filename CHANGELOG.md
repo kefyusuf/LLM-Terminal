@@ -58,6 +58,8 @@
 - Improved failed-download detail messages and reduced forced table refreshes on queue/cancel actions.
 - Bumped downloader service compatibility to `1.3` and auto-migrated legacy Hugging Face command payloads in existing jobs.
 - Preserved results-table cursor and scroll position across refreshes to prevent jump-to-top after download actions.
+- Hardened worker loop against transient queue polling exceptions and exposed worker liveness in debug status.
+- Bumped downloader service compatibility baseline to `1.4`.
 
 ## 0.1.0 - 2026-02-26
 

@@ -22,7 +22,7 @@ from download_manager import (
 DB_PATH = Path(__file__).resolve().with_name("downloads.db")
 HOST = "127.0.0.1"
 PORT = 8765
-SERVICE_VERSION = "1.3"
+SERVICE_VERSION = "1.4"
 
 
 class DownloadStore:
@@ -312,6 +312,7 @@ class DownloadServiceState:
         self.running_lock = threading.Lock()
         self.stop_event = threading.Event()
         self.server: Any = None
+        self.worker_thread: Any = None
 
     def get_process(self, target_id):
         with self.running_lock:
@@ -362,7 +363,12 @@ def _extract_progress(line):
 
 def worker_loop():
     while not STATE.stop_event.is_set():
-        job = STATE.store.claim_next_queued()
+        try:
+            job = STATE.store.claim_next_queued()
+        except Exception:
+            time.sleep(0.5)
+            continue
+
         if job is None:
             time.sleep(0.25)
             continue
@@ -400,6 +406,7 @@ def worker_loop():
                     detail="Downloading",
                     progress="",
                 )
+                STATE.set_process(target_id, object())
 
                 try:
                     snapshot_download(repo_id=repo_id, allow_patterns=["*.gguf"])
@@ -557,6 +564,10 @@ class Handler(BaseHTTPRequestHandler):
                     "active_targets": active_targets,
                     "count": len(active_targets),
                     "has_duplicates": _has_duplicates(active_targets),
+                    "worker_alive": bool(
+                        STATE.worker_thread is not None
+                        and STATE.worker_thread.is_alive()
+                    ),
                 },
             )
             return
@@ -664,6 +675,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     worker = threading.Thread(target=worker_loop, daemon=True)
     worker.start()
+    STATE.worker_thread = worker
 
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     STATE.server = server
