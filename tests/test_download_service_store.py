@@ -123,3 +123,32 @@ def test_delete_job_rejects_active_entry(tmp_path):
     deleted, reason = store.delete_job(job["target_id"])
     assert deleted is False
     assert reason == "active"
+
+
+def test_migrate_legacy_hf_commands_updates_cli_invocation(tmp_path):
+    store = DownloadStore(tmp_path / "jobs.db")
+    with store._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO jobs (
+                target_id, source, publisher, name, command_json, status,
+                detail, progress, created_at, updated_at, cancel_requested, return_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+            """,
+            (
+                "hugging face:qwen/foo",
+                "Hugging Face",
+                "qwen",
+                "QwenFoo",
+                '["python", "-m", "huggingface_hub.commands.huggingface_cli", "download", "Qwen/Foo", "--include", "*.gguf"]',
+                "failed",
+                "old",
+                "",
+                1.0,
+                1.0,
+            ),
+        )
+
+    store.migrate_legacy_hf_commands()
+    command = store.get_command("hugging face:qwen/foo")
+    assert command == ["hf_api_download", "Qwen/Foo"]

@@ -56,6 +56,7 @@
 - Added fallback parsing for Ollama card-style model listings when no HTML table is present.
 - Switched Hugging Face downloads from brittle CLI module invocation to `huggingface_hub.snapshot_download` in the background service.
 - Improved failed-download detail messages and reduced forced table refreshes on queue/cancel actions.
+- Bumped downloader service compatibility to `1.3` and auto-migrated legacy Hugging Face command payloads in existing jobs.
 
 ## 0.1.0 - 2026-02-26
 

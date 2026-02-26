@@ -22,7 +22,7 @@ from download_manager import (
 DB_PATH = Path(__file__).resolve().with_name("downloads.db")
 HOST = "127.0.0.1"
 PORT = 8765
-SERVICE_VERSION = "1.2"
+SERVICE_VERSION = "1.3"
 
 
 class DownloadStore:
@@ -98,6 +98,37 @@ class DownloadStore:
                 """,
                 (now,),
             )
+
+    def migrate_legacy_hf_commands(self):
+        with self.lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, source, command_json FROM jobs WHERE source = 'Hugging Face'"
+            ).fetchall()
+            for row in rows:
+                row_id = row["id"]
+                try:
+                    command = json.loads(row["command_json"])
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(command, list) or len(command) < 2:
+                    continue
+                if command[0] == "hf_api_download":
+                    continue
+                if "huggingface_hub.commands.huggingface_cli" not in command:
+                    continue
+                repo_id = None
+                if "download" in command:
+                    try:
+                        idx = command.index("download")
+                        repo_id = command[idx + 1]
+                    except (ValueError, IndexError):
+                        repo_id = None
+                if not repo_id:
+                    continue
+                conn.execute(
+                    "UPDATE jobs SET command_json = ? WHERE id = ?",
+                    (json.dumps(["hf_api_download", repo_id]), row_id),
+                )
 
     def _row_to_dict(self, row):
         if row is None:
@@ -275,6 +306,7 @@ class DownloadServiceState:
     def __init__(self):
         self.store = DownloadStore(DB_PATH)
         self.store.normalize_target_ids()
+        self.store.migrate_legacy_hf_commands()
         self.store.recover_orphaned_running_jobs()
         self.running_processes = {}
         self.running_lock = threading.Lock()
