@@ -309,6 +309,8 @@ class AIModelViewer(App):
         self.all_results = []
         self.current_filter = "All"
         self.last_search_error = ""
+        self.search_counter = 0
+        self.active_search_id = 0
 
     def compose(self) -> ComposeResult:
         yield SystemInfoWidget(id="header")
@@ -351,10 +353,12 @@ class AIModelViewer(App):
         if not query:
             return
         self.last_search_error = ""
+        self.search_counter += 1
+        self.active_search_id = self.search_counter
         table = self.query_one(DataTable)
         table.clear()
         table.loading = True
-        self.run_search_worker(query)
+        self.run_search_worker(query, self.active_search_id)
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         pid = event.pressed.id
@@ -383,7 +387,7 @@ class AIModelViewer(App):
             self.push_screen(ModelDetailModal(selected_model))
 
     @work(thread=True)
-    def run_search_worker(self, query: str) -> None:
+    def run_search_worker(self, query: str, search_id: int) -> None:
         specs = self.monitor.get_specs()
         local_models = get_installed_ollama_models() if check_ollama_running() else []
         results = []
@@ -539,11 +543,16 @@ class AIModelViewer(App):
         except (HfHubHTTPError, requests.RequestException, ValueError, OSError) as exc:
             errors.append(f"Hugging Face search failed: {exc}")
 
+        if search_id != self.active_search_id:
+            return
+
         self.all_results = results
         self.last_search_error = " | ".join(errors[:2])
-        self.call_from_thread(self.on_search_completed)
+        self.call_from_thread(self.on_search_completed, search_id)
 
-    def on_search_completed(self) -> None:
+    def on_search_completed(self, search_id: int) -> None:
+        if search_id != self.active_search_id:
+            return
         table = self.query_one(DataTable)
         table.loading = False
         self.refresh_table()
