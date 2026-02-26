@@ -188,6 +188,25 @@ def calculate_fit(size_gb, specs):
         return "[bold red]No Fit[/bold red]", "[red]-[/red]", "Yetersiz"
 
 
+def estimate_model_size_gb(model_name):
+    mn = model_name.lower()
+    if "70b" in mn or "72b" in mn:
+        return 40.0
+    if "32b" in mn:
+        return 19.0
+    if "27b" in mn:
+        return 16.0
+    if "14b" in mn or "13b" in mn:
+        return 8.0
+    if "8b" in mn or "7b" in mn:
+        return 4.8
+    if "1.5b" in mn:
+        return 1.2
+    if "0.5b" in mn:
+        return 0.6
+    return 4.8
+
+
 # --- MODAL (POPUP) EKRANI ---
 class ModelDetailModal(ModalScreen):
     """Satıra tıklanınca açılan detay penceresi"""
@@ -311,6 +330,8 @@ class AIModelViewer(App):
         self.last_search_error = ""
         self.search_counter = 0
         self.active_search_id = 0
+        self.hf_repo_files_cache = {}
+        self.hf_model_info_cache = {}
 
     def compose(self) -> ComposeResult:
         yield SystemInfoWidget(id="header")
@@ -440,22 +461,7 @@ class AIModelViewer(App):
                         )
                         use_case = determine_use_case(model_name)
 
-                        es = 4.8
-                        mn = model_name.lower()
-                        if "70b" in mn or "72b" in mn:
-                            es = 40.0
-                        elif "32b" in mn:
-                            es = 19.0
-                        elif "27b" in mn:
-                            es = 16.0
-                        elif "14b" in mn or "13b" in mn:
-                            es = 8.0
-                        elif "8b" in mn or "7b" in mn:
-                            es = 4.8
-                        elif "1.5b" in mn:
-                            es = 1.2
-                        elif "0.5b" in mn:
-                            es = 0.6
+                        es = estimate_model_size_gb(model_name)
 
                         fit_str, mode_str, _ = calculate_fit(es, specs)
                         results.append(
@@ -485,7 +491,7 @@ class AIModelViewer(App):
             hf_models = api.list_models(
                 search=query, sort="downloads", limit=15, filter="gguf"
             )
-            for model in hf_models:
+            for idx, model in enumerate(hf_models):
                 provider = model.modelId.split("/")[0][:15]
                 name = model.modelId.split("/")[-1]
                 unique_k = f"Hugging Face:{model.modelId.lower()}"
@@ -502,23 +508,38 @@ class AIModelViewer(App):
                     else "[grey50]-[/grey50]"
                 )
 
-                files = api.list_repo_files(repo_id=model.modelId)
-                target = next((f for f in files if "Q4_K_M.gguf" in f), None)
-                if not target:
-                    target = next((f for f in files if "Q4_0.gguf" in f), None)
-                if not target:
-                    target = next((f for f in files if "Q5_K_M.gguf" in f), None)
-                if not target:
-                    target = next((f for f in files if f.endswith(".gguf")), None)
+                target = None
+                quant = "GGUF"
+                size = estimate_model_size_gb(name)
+                detailed_lookup = idx < 8
 
-                if target:
-                    info = api.model_info(model.modelId, files_metadata=True)
-                    f_meta = next(
-                        (s for s in info.siblings if s.rfilename == target), None
-                    )
-                    if f_meta:
-                        size = f_meta.size / (1024**3)
-                        fit_str, mode_str, _ = calculate_fit(size, specs)
+                if detailed_lookup:
+                    files = self.hf_repo_files_cache.get(model.modelId)
+                    if files is None:
+                        files = api.list_repo_files(repo_id=model.modelId)
+                        self.hf_repo_files_cache[model.modelId] = files
+
+                    target = next((f for f in files if "Q4_K_M.gguf" in f), None)
+                    if not target:
+                        target = next((f for f in files if "Q4_0.gguf" in f), None)
+                    if not target:
+                        target = next((f for f in files if "Q5_K_M.gguf" in f), None)
+                    if not target:
+                        target = next((f for f in files if f.endswith(".gguf")), None)
+
+                    if target:
+                        info = self.hf_model_info_cache.get(model.modelId)
+                        if info is None:
+                            info = api.model_info(model.modelId, files_metadata=True)
+                            self.hf_model_info_cache[model.modelId] = info
+
+                        siblings = info.siblings or []
+                        f_meta = next(
+                            (s for s in siblings if s.rfilename == target), None
+                        )
+                        if f_meta and f_meta.size:
+                            size = f_meta.size / (1024**3)
+
                         quant = (
                             target.split(".")[-2]
                             if len(target.split(".")) > 2
@@ -526,22 +547,24 @@ class AIModelViewer(App):
                         )
                         if "gguf" in quant.lower():
                             quant = "GGUF"
-                        results.append(
-                            {
-                                "inst": "[grey37]-[/grey37]",
-                                "source": "Hugging Face",
-                                "provider": provider,
-                                "id": model.modelId,
-                                "name": name,
-                                "params": params,
-                                "use_case": use_case,
-                                "score": score_str,
-                                "quant": quant,
-                                "mode": mode_str,
-                                "fit": fit_str,
-                                "size": f"{size:.1f} GB",
-                            }
-                        )
+
+                fit_str, mode_str, _ = calculate_fit(size, specs)
+                results.append(
+                    {
+                        "inst": "[grey37]-[/grey37]",
+                        "source": "Hugging Face",
+                        "provider": provider,
+                        "id": model.modelId,
+                        "name": name,
+                        "params": params,
+                        "use_case": use_case,
+                        "score": score_str,
+                        "quant": quant,
+                        "mode": mode_str,
+                        "fit": fit_str,
+                        "size": f"{size:.1f} GB",
+                    }
+                )
         except (HfHubHTTPError, requests.RequestException, ValueError, OSError) as exc:
             errors.append(f"Hugging Face search failed: {exc}")
 
