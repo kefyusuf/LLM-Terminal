@@ -35,6 +35,10 @@ def _retry_after_from_response(response):
     retry_after = response.headers.get("Retry-After")
     if not retry_after:
         return None
+    try:
+        return int(retry_after)
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_size_gb(size_text):
@@ -83,9 +87,10 @@ def _extract_models_table_rows(html_text, model_name=None):
         model_rows = []
         model_prefix = f"/library/{model_name.lower()}:"
         for anchor in soup.find_all("a", href=True):
-            href = (anchor.get("href") or "").strip()
-            if not isinstance(href, str):
+            raw_href = anchor.get("href")
+            if not isinstance(raw_href, str):
                 continue
+            href = raw_href.strip()
             if not href.lower().startswith(model_prefix):
                 continue
             variant_name = href.split("/library/", maxsplit=1)[-1]
@@ -155,10 +160,6 @@ def get_ollama_model_metadata(model_name):
 
     OLLAMA_MODEL_META_CACHE[cache_key] = {"timestamp": now, "value": metadata}
     return metadata
-    try:
-        return int(retry_after)
-    except (TypeError, ValueError):
-        return None
 
 
 def search_ollama_models(query, specs, local_models):

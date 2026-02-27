@@ -20,7 +20,7 @@ from download_manager import (
 DB_PATH = Path(__file__).resolve().with_name("downloads.db")
 HOST = "127.0.0.1"
 PORT = 8765
-SERVICE_VERSION = "1.5"
+SERVICE_VERSION = "1.6"
 
 
 class DownloadStore:
@@ -417,32 +417,40 @@ def worker_loop():
                 )
                 process = subprocess.Popen(
                     [sys.executable, "-c", hf_script, repo_id],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    bufsize=1,
                     **_service_popen_kwargs(),
                 )
                 STATE.set_process(target_id, process)
-                last_line = ""
+                cancel_sent_at = None
 
                 try:
-                    if process.stdout is not None:
-                        for raw_line in process.stdout:
-                            line = raw_line.strip()
-                            if line:
-                                last_line = line
-
-                            latest = STATE.store.get_job_by_target(target_id)
-                            if latest and latest.get("cancel_requested"):
+                    while True:
+                        latest = STATE.store.get_job_by_target(target_id)
+                        if latest and latest.get("cancel_requested"):
+                            if cancel_sent_at is None:
+                                cancel_sent_at = time.monotonic()
                                 try:
                                     process.terminate()
                                 except OSError:
                                     pass
+                            elif (
+                                process.poll() is None
+                                and (time.monotonic() - cancel_sent_at) > 1.5
+                            ):
+                                try:
+                                    process.kill()
+                                except OSError:
+                                    pass
 
-                    return_code = process.wait()
+                        return_code = process.poll()
+                        if return_code is not None:
+                            break
+                        time.sleep(0.25)
+
                     latest = STATE.store.get_job_by_target(target_id)
                     if latest and latest.get("cancel_requested"):
                         STATE.store.update_job(
@@ -462,8 +470,10 @@ def worker_loop():
                         )
                     else:
                         failure_detail = "hugging face download failed"
-                        if last_line:
-                            failure_detail = last_line[:180]
+                        if process.stderr is not None:
+                            err_text = process.stderr.read().strip()
+                            if err_text:
+                                failure_detail = err_text.splitlines()[-1][:180]
                         STATE.store.update_job(
                             target_id,
                             status="failed",
@@ -662,18 +672,6 @@ class Handler(BaseHTTPRequestHandler):
                     process.terminate()
                 except OSError:
                     pass
-
-                try:
-                    process.wait(timeout=1.0)
-                except subprocess.TimeoutExpired:
-                    try:
-                        process.kill()
-                    except OSError:
-                        pass
-                    try:
-                        process.wait(timeout=1.0)
-                    except subprocess.TimeoutExpired:
-                        pass
             elif process is not None:
                 process = None
 

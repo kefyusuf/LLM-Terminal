@@ -63,6 +63,8 @@
 - Made Hugging Face downloads cancellable by running API downloads in a subprocess and tracking a real process handle.
 - Fixed cancel endpoint resilience when an active target had a non-terminable placeholder object.
 - Bumped downloader service compatibility baseline to `1.5` to enforce rollout of cancelability fixes.
+- Bumped downloader service compatibility baseline to `1.6` and improved HF cancel flow with poll-based process termination.
+- Restored Ollama retry-after parsing reliability after helper regression.
 
 ## 0.1.0 - 2026-02-26
 
