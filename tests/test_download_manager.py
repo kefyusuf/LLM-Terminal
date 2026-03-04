@@ -10,7 +10,7 @@ from download_manager import (
 def test_build_download_command_hf():
     model = {"source": "Hugging Face", "id": "unsloth/Qwen3-Coder-Next-GGUF"}
     command = build_download_command(model)
-    assert command == ["hf_api_download", "unsloth/Qwen3-Coder-Next-GGUF"]
+    assert command == ["python", "hf_downloader.py", "unsloth/Qwen3-Coder-Next-GGUF"]
 
 
 def test_build_download_command_ollama():
@@ -24,10 +24,7 @@ def test_build_download_command_rejects_unknown_source():
 
 
 def test_download_target_id_prefers_id():
-    assert (
-        download_target_id({"source": "Hugging Face", "id": "foo/bar"})
-        == "hugging face:foo/bar"
-    )
+    assert download_target_id({"source": "Hugging Face", "id": "foo/bar"}) == "hugging face:foo/bar"
 
 
 def test_download_target_id_normalizes_case_and_space():
