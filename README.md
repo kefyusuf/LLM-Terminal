@@ -34,7 +34,7 @@ LLM Terminal is a Textual-based TUI that helps you find local-LLM models from Ol
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/llm-terminal
+git clone https://github.com/kefyusuf/llm-terminal
 cd llm-terminal
 
 # Create virtual environment (recommended)
