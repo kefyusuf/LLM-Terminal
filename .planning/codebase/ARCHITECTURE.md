@@ -167,14 +167,14 @@ The application runs as a single Textual-based TUI process (`app.py:673`, class 
 
 ## Error Handling
 
-**Strategy:** Defensive logging with broad exception catches. Most error recovery is silent (log or status bar message).
+**Strategy:** Defensive logging with broad exception catches. Most error recovery is silent (log or status bar message). Providers return diagnostics as a `list[str]` carried inside a `SearchResult` (see `providers/base.py`); downstream code never sees a typed exception.
 
 **Patterns:**
 - Broad `except Exception: pass` — used extensively across the codebase (e.g., `app.py:967`, `app.py:1237`, `app.py:1318`, etc.)
 - HTTP error recovery: `service_client.py` retries once with `ensure_service_running()` on 404
 - Graceful degradation: Hardware detection fails -> returns empty specs; Search fails -> shows error in results table
 - Status bar updates via `self.update_status()` are the primary user-facing error channel
-- No formal error types — errors are strings passed through dicts (e.g., `(results, errors)` tuples)
+- Error messages are plain strings. The earlier `core/errors.py` typed hierarchy (added in commit 923f3d6, 2026-06-09) was removed: only one of five providers used it, and the receiving TUI flattened the types to strings anyway, so the type information did not survive the seam.
 
 ## Cross-Cutting Concerns
 

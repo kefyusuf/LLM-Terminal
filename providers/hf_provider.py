@@ -57,7 +57,7 @@ class HuggingFaceProvider:
         )
         return SearchResult(
             results=results,
-            errors=[str(e) for e in errors],
+            errors=list(errors),
             has_more_pages=len(results) >= limit,
         )
 
@@ -177,20 +177,12 @@ def search_hf_models(
         )
         hf_models = list(hf_models_iter)[offset : offset + limit]
     except HfHubHTTPError as exc:
-        from core.errors import NetworkError, RateLimitError
-
         msg = _format_hf_http_error(exc)
-        if "429" in str(exc):
-            return results, [RateLimitError(msg)]
-        return results, [NetworkError(msg)]
+        return results, [msg]
     except RequestException as exc:
-        from core.errors import NetworkError
-
-        return results, [NetworkError(f"Hugging Face search failed: {exc}")]
+        return results, [f"Hugging Face search failed: {exc}"]
     except (ValueError, OSError) as exc:
-        from core.errors import ParseError
-
-        return results, [ParseError(f"Hugging Face search failed: {exc}")]
+        return results, [f"Hugging Face search failed: {exc}"]
 
     for model in hf_models:
         try:
