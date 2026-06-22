@@ -422,3 +422,81 @@ def test_smoke_runs_download_service_check(tmp_path, monkeypatch):
     assert calls[3][0] == [str(venv_python), "-m", "downloads.download_service"]
     assert calls[3][2]["timeout"] == 15
     assert calls[3][2]["env"]["AIMODEL_SMOKE"] == "1"
+
+
+def test_live_runs_pytest_then_release_preflight(tmp_path, monkeypatch):
+    dev = _load_dev_module()
+    venv_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+
+    calls = []
+
+    def _fake_run(cmd, check, cwd, **kwargs):
+        calls.append((cmd, cwd, kwargs))
+
+        class _Result:
+            returncode = 0
+
+        return _Result()
+
+    monkeypatch.setattr(dev, "project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(dev.subprocess, "run", _fake_run)
+
+    assert dev.live() == 0
+    assert [command for command, _cwd, _kwargs in calls] == [
+        [str(venv_python), "-m", "pytest", "-q", "--run-live"],
+        [str(venv_python), "-m", "scripts.release_check"],
+    ]
+    assert calls[0][2]["timeout"] == 720
+    assert calls[1][2]["timeout"] == 120
+
+
+def test_live_fails_when_venv_missing(tmp_path, monkeypatch):
+    dev = _load_dev_module()
+    monkeypatch.setattr(dev, "project_root", lambda: tmp_path)
+
+    with pytest.raises(SystemExit, match=r"\[live\] missing virtualenv"):
+        dev.live()
+
+
+def test_live_reports_timeout_for_pytest(tmp_path, monkeypatch):
+    dev = _load_dev_module()
+    venv_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+
+    def _fake_run(cmd, check, cwd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(dev, "project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(dev.subprocess, "run", _fake_run)
+
+    with pytest.raises(SystemExit, match=r"\[live\] pytest timed out"):
+        dev.live()
+
+
+def test_live_reports_failed_release_preflight(tmp_path, monkeypatch):
+    dev = _load_dev_module()
+    venv_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+
+    def _fake_run(cmd, check, cwd, **kwargs):
+        raise subprocess.CalledProcessError(returncode=2, cmd=cmd)
+
+    monkeypatch.setattr(dev, "project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(dev.subprocess, "run", _fake_run)
+
+    with pytest.raises(SystemExit, match=r"\[live\] pytest failed"):
+        dev.live()
+
+
+def test_live_subcommand_is_registered():
+    dev = _load_dev_module()
+    parser = dev.build_parser()
+    args = parser.parse_args(["live"])
+    assert args.command == "live"

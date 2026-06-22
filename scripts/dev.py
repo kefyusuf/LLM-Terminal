@@ -302,6 +302,44 @@ def smoke() -> int:
     return 0
 
 
+def run_live_step(
+    step_name: str,
+    command: list[str],
+    root: Path,
+    *,
+    timeout: int,
+) -> None:
+    try:
+        subprocess.run(command, check=True, cwd=root, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise SystemExit(f"[live] {step_name} timed out") from exc
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"[live] {step_name} failed") from exc
+
+
+def live() -> int:
+    ensure_supported_python()
+    root = project_root()
+    venv_python = venv_python_path(root)
+
+    if not venv_python.exists():
+        raise SystemExit("[live] missing virtualenv; run python scripts/dev.py bootstrap first")
+
+    run_live_step(
+        "pytest",
+        [str(venv_python), "-m", "pytest", "-q", "--run-live"],
+        root,
+        timeout=720,
+    )
+    run_live_step(
+        "release-preflight",
+        [str(venv_python), "-m", "scripts.release_check"],
+        root,
+        timeout=120,
+    )
+    return 0
+
+
 def not_implemented(command_name: str) -> int:
     raise SystemExit(f"scripts/dev.py {command_name} is not implemented yet")
 
@@ -313,6 +351,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("bootstrap", help="Create or reuse .venv and install the platform dev lock")
     subparsers.add_parser("verify", help="Run the project verify lane")
     subparsers.add_parser("smoke", help="Run the project smoke lane")
+    subparsers.add_parser("live", help="Run the live integration lane (pytest --run-live + release preflight)")
     lock_parser = subparsers.add_parser("lock", help="Manage committed lock files")
     lock_parser.add_argument("--check", action="store_true", help="Fail if the current-platform locks are missing or stale")
 
@@ -329,6 +368,8 @@ def main(argv: list[str] | None = None) -> int:
         return verify()
     if args.command == "smoke":
         return smoke()
+    if args.command == "live":
+        return live()
     if args.command == "lock":
         return lock(check=args.check)
 
