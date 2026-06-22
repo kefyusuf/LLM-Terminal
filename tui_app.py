@@ -17,6 +17,7 @@ from textual.widgets import (
 )
 
 import config
+from app.search_results_state import SearchResultsState
 from core import cache_db
 from core.logging_ import get_logger
 from core.model_intelligence import plan_hardware_for_model
@@ -238,20 +239,15 @@ class AIModelViewer(App):
     def __init__(self):
         super().__init__()
         self.monitor = HardwareMonitor()
-        self.all_results = []
+        self.search_state = SearchResultsState(
+            page_size=config.settings.hf_search_limit,
+            max_pages=config.settings.hf_search_max_pages,
+        )
         self.ui_mode = config.settings.ui_mode
         self.compact_mode = self.ui_mode == "compact"
-        self.current_filter = "Ollama"
-        self.use_case_filter = "all"
-        self.sort_mode = "score"
-        self.fit_filter = "all"
-        self.hidden_gems_only = False
         self.comparison_set: list[dict] = []
         self._color_theme = config.settings.theme
         self.ollama_running = False
-        self.last_search_error = ""
-        self.search_counter = 0
-        self.active_search_id = 0
         self.hf_model_info_cache = {}
         self.search_cache = SearchCache(
             ttl_seconds=config.settings.search_cache_ttl_seconds,
@@ -264,24 +260,11 @@ class AIModelViewer(App):
         self.download_status_timer = None
         self.latest_specs = None
         self._modal_poll_pause_count = 0
-        self.results_column_keys = []
-        self.results_column_widths = {}
-        self._table_row_keys: set[str] = set()
-        self.current_page = 0
-        self.page_size = config.settings.hf_search_limit
-        self.max_pages = config.settings.hf_search_max_pages
-        self.total_results = 0
-        self.has_more_pages = True
         self._system_info_refresh_running = False
         self._resize_reflow_timer = None
         self._resize_reflow_generation = 0
         self._search_debounce_timer = None
         self._search_debounce_delay = 0.12
-        self._pending_search_payload = None
-        self._search_inflight_signature = None
-        self._search_inflight_started_at = 0.0
-        self._search_progress_stamp = (0, "", 0.0)
-        self._search_progress_visible = False
 
         self.dl = DownloadManager(
             update_status=self.update_status,
@@ -294,6 +277,61 @@ class AIModelViewer(App):
             history_refresh_interval=config.settings.download_history_refresh_interval,
             poll_request_timeout=config.settings.download_poll_request_timeout,
         )
+
+    _SEARCH_STATE_ATTRS = frozenset(
+        {
+            "all_results",
+            "current_filter",
+            "use_case_filter",
+            "sort_mode",
+            "fit_filter",
+            "hidden_gems_only",
+            "current_page",
+            "page_size",
+            "max_pages",
+            "total_results",
+            "has_more_pages",
+            "results_column_keys",
+            "results_column_widths",
+            "_table_row_keys",
+            "_search_inflight_signature",
+            "_search_inflight_started_at",
+            "_search_progress_stamp",
+            "_search_progress_visible",
+            "_pending_search_payload",
+            "last_search_error",
+            "search_counter",
+            "active_search_id",
+        }
+    )
+    _SEARCH_STATE_TO_FIELD = {
+        "all_results": "results",
+        "results_column_keys": "column_keys",
+        "results_column_widths": "column_widths",
+        "_table_row_keys": "table_row_keys",
+        "_search_inflight_signature": "inflight_signature",
+        "_search_inflight_started_at": "inflight_started_at",
+        "_search_progress_stamp": "progress_stamp",
+        "_search_progress_visible": "progress_visible",
+        "_pending_search_payload": "pending_payload",
+        "last_search_error": "last_error",
+        "search_counter": "counter",
+        "active_search_id": "active_id",
+    }
+    _FIELD_TO_LEGACY = {v: k for k, v in _SEARCH_STATE_TO_FIELD.items()}
+
+    def __getattr__(self, name: str):
+        if name in self._SEARCH_STATE_ATTRS:
+            field = self._SEARCH_STATE_TO_FIELD.get(name, name)
+            return getattr(self.search_state, field)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        if name in self._SEARCH_STATE_ATTRS:
+            field = self._SEARCH_STATE_TO_FIELD.get(name, name)
+            setattr(self.search_state, field, value)
+            return
+        super().__setattr__(name, value)
 
     def _set_modal_poll_pause(self, enabled: bool) -> None:
         if enabled:
@@ -446,25 +484,20 @@ class AIModelViewer(App):
 
     def action_cycle_use_case(self) -> None:
         keys = [key for key, _label in USE_CASE_OPTIONS]
-        current_key = self.use_case_filter if self.use_case_filter in keys else "all"
-        next_key = keys[(keys.index(current_key) + 1) % len(keys)]
+        next_key = self.search_state.cycle_use_case(keys)
         self._set_use_case_filter(next_key)
         self.refresh_table()
         self.update_status(f"Use Case filter set to {self._use_case_label(next_key)}.")
 
     def action_cycle_sort_mode(self) -> None:
         keys = [key for key, _label in SORT_OPTIONS]
-        current_key = self.sort_mode if self.sort_mode in keys else "score"
-        next_key = keys[(keys.index(current_key) + 1) % len(keys)]
-        self.sort_mode = next_key
+        next_key = self.search_state.cycle_sort(keys)
         self.refresh_table()
         self.update_status(f"Sort set to {self._sort_label(next_key)}.")
 
     def action_cycle_fit_filter(self) -> None:
         keys = [key for key, _label in FIT_OPTIONS]
-        current_key = self.fit_filter if self.fit_filter in keys else "all"
-        next_key = keys[(keys.index(current_key) + 1) % len(keys)]
-        self.fit_filter = next_key
+        next_key = self.search_state.cycle_fit(keys)
         self.refresh_table()
         self.update_status(f"Fit filter set to {self._fit_label(next_key)}.")
 
