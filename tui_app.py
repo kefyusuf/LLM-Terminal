@@ -21,7 +21,7 @@ from app.search_results_state import SearchResultsState
 from core import cache_db
 from core.logging_ import get_logger
 from core.model_intelligence import plan_hardware_for_model
-from providers import SearchResult, get_all_provider_classes, get_provider_filter_labels
+from providers import get_provider_filter_labels
 from providers.hf_provider import HuggingFaceProvider
 from providers.ollama_provider import OllamaProvider
 from terminal_ui.themes import THEMES, next_theme, theme_css
@@ -49,11 +49,9 @@ from search.search_cache import SearchCache
 from search.search_orchestration import (
     build_query_key,
     cache_hit_suffix,
-    has_more_pages_for_results,
     is_hf_provider_selection,
     page_info_suffix,
     provider_display_name,
-    provider_result_count,
     provider_search_status,
     providers_from_filter,
     validate_page_request,
@@ -1348,114 +1346,49 @@ class AIModelViewer(App):
         search_id: int,
         providers: list[str] | None = None,
     ) -> None:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from search.search_orchestrator import SearchOrchestrator
 
         if providers is None:
             providers = self._get_search_providers()
 
-        specs = self.monitor.get_specs()
-        ollama_results, ollama_errors = [], []
-        hf_results, hf_errors = [], []
-        extra_results, extra_errors = [], []
-
-        if search_id != self.active_search_id:
+        if search_id != self.search_state.active_id:
             return
 
-        def _is_cancelled():
-            return search_id != self.active_search_id
+        orchestrator = SearchOrchestrator(
+            monitor=self.monitor,
+            hf_provider=self.hf_provider,
+            ollama_provider=self.ollama_provider,
+            on_progress=lambda sid, msg: self.call_from_thread(
+                self.on_search_progress, sid, msg
+            ),
+            cancel_check=lambda: search_id != self.search_state.active_id,
+        )
 
-        def _search_ollama():
-            if _is_cancelled():
-                return SearchResult.empty()
-            self.call_from_thread(self.on_search_progress, search_id, "Fetching Ollama data...")
-            page_size = config.settings.ollama_search_limit
-            return self.ollama_provider.search_with_installed(
-                query, specs, limit=page_size, page=self.current_page
-            )
+        outcome = orchestrator.search(
+            search_id=search_id,
+            query=query,
+            providers=providers,
+            page=self.current_page,
+            page_size=self.page_size,
+            hf_token=config.settings.hf_token,
+            ollama_page_size=config.settings.ollama_search_limit,
+        )
 
-        def _search_hf():
-            if _is_cancelled():
-                return SearchResult.empty()
-            self.call_from_thread(self.on_search_progress, search_id, "Fetching Hugging Face data...")
-            return self.hf_provider.search(
-                query, specs, limit=self.page_size,
-                page=self.current_page, hf_token=config.settings.hf_token,
-            )
-
-        def _search_extra(slug):
-            if _is_cancelled():
-                return SearchResult.empty()
-            for provider_cls in get_all_provider_classes():
-                if provider_cls.slug == slug:
-                    self.call_from_thread(
-                        self.on_search_progress, search_id, f"Fetching {provider_cls.display_name} data..."
-                    )
-                    instance = provider_cls()
-                    if instance.detect():
-                        return instance.search(query, specs, limit=self.page_size)
-                    return SearchResult(errors=[f"{slug} not reachable"])
-            return SearchResult.empty()
-
-        futures = {}
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            if "ollama" in providers:
-                futures[pool.submit(_search_ollama)] = "ollama"
-            if "huggingface" in providers:
-                futures[pool.submit(_search_hf)] = "huggingface"
-            for provider_cls in get_all_provider_classes():
-                slug = provider_cls.slug
-                if slug in providers and slug not in ("ollama", "huggingface"):
-                    futures[pool.submit(_search_extra, slug)] = slug
-
-            for future in as_completed(futures):
-                if search_id != self.active_search_id:
-                    return
-                label = futures[future]
-                try:
-                    result: SearchResult = future.result()
-                    if label == "ollama":
-                        ollama_results = result.results
-                        ollama_errors = result.errors
-                    elif label == "huggingface":
-                        hf_results = result.results
-                        hf_errors = result.errors
-                    else:
-                        extra_results.extend(result.results)
-                        extra_errors.extend(result.errors)
-                except Exception:
-                    if label == "ollama":
-                        ollama_errors.append("Ollama search failed")
-                    elif label == "huggingface":
-                        hf_errors.append("HuggingFace search failed")
-                    else:
-                        extra_errors.append(f"{label} search failed")
-
-        if search_id != self.active_search_id:
+        if outcome.cancelled or search_id != self.search_state.active_id:
             return
 
         self.call_from_thread(self.on_search_progress, search_id, "Finalizing search results...")
-        self.all_results = ollama_results + hf_results + extra_results
+        self.all_results = outcome.results
         self.dl.ensure_download_fields(self.all_results)
-        self.last_search_error = " | ".join((ollama_errors + hf_errors + extra_errors)[:2])
+        self.last_search_error = " | ".join(outcome.errors[:2])
+        self.has_more_pages = outcome.has_more_pages
 
-        self.has_more_pages = has_more_pages_for_results(
-            providers,
-            hf_result_count=len(hf_results),
-            ollama_result_count=len(ollama_results),
-            page_size=self.page_size,
-        )
-
-        result_count = provider_result_count(
-            providers,
-            hf_result_count=len(hf_results),
-            ollama_result_count=len(ollama_results),
-        )
         self.call_from_thread(
             self.update_status,
             provider_search_status(
-                providers,
-                result_count=result_count,
-                has_more_pages=self.has_more_pages,
+                outcome.providers,
+                result_count=outcome.result_count,
+                has_more_pages=outcome.has_more_pages,
                 current_page=self.current_page,
             ),
         )
@@ -1465,7 +1398,7 @@ class AIModelViewer(App):
             results=self.all_results,
             error=self.last_search_error,
             has_more_pages=self.has_more_pages,
-            specs=specs,
+            specs=self.monitor.get_specs(),
         )
         self.call_from_thread(self.on_search_completed, search_id)
 
