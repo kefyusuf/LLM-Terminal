@@ -66,7 +66,6 @@ known-first-party = ["app", "core", "downloads", "providers",
 "search/search_orchestration.py" = ["I001"]
 "scripts/release_check.py" = ["I001"]
 "api_server.py" = ["I001"]
-"terminal_ui/app.py" = ["E741", "RUF001", "RUF012", "SIM105", "SIM117"]
 
 # ---------------------------------------------------------------------------
 # Mypy — static type checking
