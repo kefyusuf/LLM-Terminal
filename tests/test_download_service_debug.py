@@ -1,9 +1,6 @@
-from downloads.download_service import (
-    _can_terminate_process,
-    _has_duplicates,
-    _is_hf_api_command,
-    _repo_id_from_hf_command,
-)
+from downloads.api import _can_terminate_process, _has_duplicates
+from downloads.runner import _repo_id_from_hf_command
+from downloads.runner import is_hf_api_command as _is_hf_api_command
 
 
 def test_has_duplicates_detects_duplicate_values():

@@ -64,9 +64,9 @@ class TestWorkerLoop:
         store.get_command.return_value = ["echo", "hello"]
         STATE.store = store
         set_claim_return({"target_id": "test:job"})
-        with patch("downloads.download_service._run_stream_download_job") as mock_run:
+        with patch("downloads.download_service.process_job") as mock_run:
             worker_loop()
-        mock_run.assert_called_once_with("test:job", ["echo", "hello"])
+        mock_run.assert_called_once_with(STATE, "test:job")
 
     def test_loop_skips_cancelled_job(self):
         store = _make_store()
