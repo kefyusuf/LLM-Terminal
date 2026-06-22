@@ -146,6 +146,7 @@ def compile_lock(source_file: Path, output_file: Path, cwd: Path) -> None:
             "-m",
             "piptools",
             "compile",
+            "--strip-extras",
             f"--output-file={output_file.relative_to(cwd).as_posix()}",
             source_file.relative_to(cwd).as_posix(),
         ],
@@ -220,6 +221,14 @@ def lock(*, check: bool = False) -> int:
     for source_name, output_name in select_lock_targets(system_name):
         compile_lock(requirement_path(root, source_name), requirement_path(root, output_name), root)
         print(f"[lock] regenerated {REQUIREMENTS_DIRNAME}/{output_name}")
+
+    if os.environ.get("AIMODEL_LOCK_ALL") == "1":
+        for alt_system in ("Windows", "Linux"):
+            if alt_system == system_name:
+                continue
+            for source_name, output_name in select_lock_targets(alt_system):
+                compile_lock(requirement_path(root, source_name), requirement_path(root, output_name), root)
+                print(f"[lock] regenerated {REQUIREMENTS_DIRNAME}/{output_name}")
 
     return 0
 
