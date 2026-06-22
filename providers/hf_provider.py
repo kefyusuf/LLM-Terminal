@@ -14,6 +14,58 @@ from core.utils import (
     infer_quant_from_name,
     parse_retry_after_seconds,
 )
+from providers.base import SearchResult
+
+
+class HuggingFaceProvider:
+    """Class adapter wrapping the module-level :func:`search_hf_models`.
+
+    The free function is preserved for backward compatibility; the
+    class form lets the orchestrator treat HF the same as every other
+    :class:`BaseProvider` subclass. ``refresh_installed()`` is a no-op
+    since HF has no local-install concept; ``enrich()`` is the
+    :func:`enrich_hf_model_details` function.
+    """
+
+    slug = "huggingface"
+    display_name = "Hugging Face"
+
+    def __init__(self, model_info_cache: dict | None = None):
+        self.model_info_cache = model_info_cache if model_info_cache is not None else {}
+
+    def detect(self) -> bool:
+        return True
+
+    def search(
+        self,
+        query: str,
+        specs: dict,
+        limit: int = 15,
+        *,
+        page: int = 0,
+        hf_token: str | None = None,
+        **kwargs,
+    ) -> SearchResult:
+        offset = page * limit
+        results, errors = search_hf_models(
+            query,
+            specs,
+            self.model_info_cache,
+            limit=limit,
+            offset=offset,
+            hf_token=hf_token,
+        )
+        return SearchResult(
+            results=results,
+            errors=[str(e) for e in errors],
+            has_more_pages=len(results) >= limit,
+        )
+
+    def list_installed(self) -> list[str]:
+        return []
+
+    def enrich(self, model: dict, specs: dict) -> dict:
+        return enrich_hf_model_details(model, specs, self.model_info_cache)
 
 
 def _repo_id_from_model(model):

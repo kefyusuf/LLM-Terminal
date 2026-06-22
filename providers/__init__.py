@@ -2,6 +2,7 @@
 
 Provides a unified provider architecture with:
 - ``BaseProvider`` — abstract base class for all providers
+- ``SearchResult`` — uniform return type for every ``search()`` call
 - ``PROVIDERS`` — registry of all available providers
 - Provider detection and dynamic availability checking
 """
@@ -12,6 +13,8 @@ from contextlib import suppress
 from abc import ABC, abstractmethod
 from loguru import logger
 from typing import Any
+
+from providers.base import SearchResult
 
 
 class BaseProvider(ABC):
@@ -37,11 +40,15 @@ class BaseProvider(ABC):
         specs: dict[str, Any],
         limit: int = 15,
         **kwargs: Any,
-    ) -> tuple[list[dict[str, Any]], list[str]]:
+    ) -> SearchResult:
         """Search for models matching *query*.
 
         Returns:
-            ``(results, errors)`` — list of model result dicts and error messages.
+            A ``SearchResult`` carrying results, errors, and a
+            ``has_more_pages`` flag. Providers must NOT raise for
+            transient errors (rate limits, network failures, parse
+            errors) — they return diagnostics in ``SearchResult.errors``
+            and the orchestrator decides what to surface to the user.
         """
 
     @abstractmethod
@@ -54,8 +61,13 @@ class BaseProvider(ABC):
         specs: dict[str, Any],
         limit: int = 15,
         **kwargs: Any,
-    ) -> tuple[list[dict[str, Any]], list[str]]:
-        """Search and mark installed models. Override for custom behavior."""
+    ) -> SearchResult:
+        """Search and mark installed models. Override for custom behavior.
+
+        The base implementation calls ``search()`` and ignores installed
+        state. Subclasses (e.g. Ollama) override to inject installed-
+        model markers into the result dicts.
+        """
         return self.search(query, specs, limit=limit, **kwargs)
 
 
@@ -66,15 +78,15 @@ class BaseProvider(ABC):
 
 # Lazy imports to avoid circular dependencies
 def _get_ollama_provider():
-    from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
+    from providers.ollama_provider import OllamaProvider
 
-    return search_ollama_models, get_installed_ollama_models
+    return OllamaProvider
 
 
 def _get_hf_provider():
-    from providers.hf_provider import enrich_hf_model_details, search_hf_models
+    from providers.hf_provider import HuggingFaceProvider
 
-    return search_hf_models, enrich_hf_model_details
+    return HuggingFaceProvider
 
 
 def _get_lmstudio_provider():
@@ -95,10 +107,23 @@ def _get_mlx_provider():
     return MLXProvider
 
 
-def get_all_provider_classes() -> list[type[BaseProvider]]:
-    """Return all available provider classes (may fail on non-matching platforms)."""
+def get_all_provider_classes() -> list[type]:
+    """Return all available provider classes (may fail on non-matching platforms).
+
+    Note: returns a mix of :class:`BaseProvider` subclasses and
+    duck-typed providers (HuggingFaceProvider, OllamaProvider) that
+    expose the same interface (``slug``, ``display_name``,
+    ``detect()``, ``search()``, ``list_installed()``,
+    ``search_with_installed()``).
+    """
     providers = []
-    for getter in [_get_lmstudio_provider, _get_docker_provider, _get_mlx_provider]:
+    for getter in [
+        _get_hf_provider,
+        _get_ollama_provider,
+        _get_lmstudio_provider,
+        _get_docker_provider,
+        _get_mlx_provider,
+    ]:
         with suppress(ImportError, Exception):
             providers.append(getter())
     return providers

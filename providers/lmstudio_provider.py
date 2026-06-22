@@ -14,6 +14,7 @@ from requests.exceptions import RequestException
 from core.http_client import get_session
 from core.scoring import enrich_result_with_scores
 from providers import BaseProvider
+from providers.base import SearchResult
 
 
 class LMStudioProvider(BaseProvider):
@@ -64,23 +65,23 @@ class LMStudioProvider(BaseProvider):
         except RequestException:
             return False
 
-    def search(self, query: str, specs: dict, page_size: int = 20) -> tuple[list[dict], list[str]]:
+    def search(self, query: str, specs: dict, limit: int = 20, **kwargs: Any) -> SearchResult:
         """Search for models in LM Studio.
 
         LM Studio serves whatever models the user has loaded locally, so
         search is a client-side filter over the full model list.
 
         Returns:
-            A ``(results, errors)`` tuple.
+            A ``SearchResult`` carrying filtered + enriched results.
         """
         try:
             resp = get_session().get(f"{self.host}/v1/models", timeout=5)
             if resp.status_code != 200:
-                return [], [f"LM Studio API returned status {resp.status_code}"]
+                return SearchResult(errors=[f"LM Studio API returned status {resp.status_code}"])
 
             data = resp.json()
         except RequestException as exc:
-            return [], [f"LM Studio search failed: {exc}"]
+            return SearchResult(errors=[f"LM Studio search failed: {exc}"])
 
         results = self._parse_models(data)
 
@@ -90,25 +91,25 @@ class LMStudioProvider(BaseProvider):
 
         # Enrich with scores
         enriched = []
-        for r in results[:page_size]:
+        for r in results[:limit]:
             try:
                 enriched.append(enrich_result_with_scores(r, specs))
             except Exception:
                 enriched.append(r)
-        return enriched, []
+        return SearchResult(results=enriched, has_more_pages=len(results) > limit)
 
     def list_installed(self) -> list[str]:
         """Return list of model names loaded in LM Studio."""
         return [m["name"] for m in self._parse_models({})]
 
     def search_with_installed(
-        self, query: str, specs: dict, installed: list[str], page_size: int = 20
-    ) -> tuple[list[dict], list[str]]:
+        self, query: str, specs: dict, limit: int = 20, **kwargs: Any
+    ) -> SearchResult:
         """Search across LM Studio with installed-model awareness.
 
         Delegates to :meth:`search` since LM Studio manages its own model set.
         """
-        return self.search(query, specs, page_size=page_size)
+        return self.search(query, specs, limit=limit, **kwargs)
 
     def get_metadata(self, model_name: str) -> dict | None:
         """Fetch metadata for a specific model.

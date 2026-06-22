@@ -22,6 +22,7 @@ from core.utils import (
     infer_quant_from_name,
 )
 from providers import BaseProvider
+from providers.base import SearchResult
 
 
 class DockerProvider(BaseProvider):
@@ -48,7 +49,7 @@ class DockerProvider(BaseProvider):
         specs: dict[str, Any],
         limit: int = 15,
         **kwargs: Any,
-    ) -> tuple[list[dict[str, Any]], list[str]]:
+    ) -> SearchResult:
         """Search Docker Model Runner's available/installed models."""
         results: list[dict[str, Any]] = []
         errors: list[str] = []
@@ -57,7 +58,7 @@ class DockerProvider(BaseProvider):
             resp = get_session().get(f"{self.host}/models", timeout=5)
             if resp.status_code != 200:
                 errors.append(f"Docker Model Runner API error (HTTP {resp.status_code})")
-                return results, errors
+                return SearchResult(results=results, errors=errors)
 
             data = resp.json()
             # Docker Model Runner returns a list or {"models": [...]}
@@ -115,7 +116,7 @@ class DockerProvider(BaseProvider):
         except RequestException as exc:
             errors.append(f"Docker Model Runner request failed: {exc}")
 
-        return results, errors
+        return SearchResult(results=results, errors=errors, has_more_pages=len(results) > limit)
 
     def list_installed(self) -> list[str]:
         """List installed Docker models."""

@@ -3,7 +3,6 @@
 from unittest.mock import patch
 
 from providers import (
-    BaseProvider,
     detect_available_providers,
     get_all_provider_classes,
     get_provider_display_names,
@@ -20,9 +19,16 @@ class TestProviderRegistry:
         classes = get_all_provider_classes()
         assert isinstance(classes, list)
 
-    def test_all_classes_are_base_provider_subclasses(self):
+    def test_all_classes_have_required_provider_interface(self):
         for cls in get_all_provider_classes():
-            assert issubclass(cls, BaseProvider)
+            assert hasattr(cls, "slug")
+            assert hasattr(cls, "display_name")
+            assert hasattr(cls, "detect")
+            assert hasattr(cls, "search")
+            assert hasattr(cls, "list_installed")
+            assert callable(cls.detect)
+            assert callable(cls.search)
+            assert callable(cls.list_installed)
 
     def test_detect_available_providers_returns_dict(self):
         result = detect_available_providers()
@@ -67,13 +73,15 @@ class TestLMStudioProvider:
         result = provider.detect()
         assert isinstance(result, bool)
 
-    def test_search_returns_tuple(self):
+    def test_search_returns_search_result(self):
+        from providers.base import SearchResult
         from providers.lmstudio_provider import LMStudioProvider
 
         provider = LMStudioProvider()
-        results, errors = provider.search("*", {"has_gpu": False, "vram_total": 0, "ram_total": 16})
-        assert isinstance(results, list)
-        assert isinstance(errors, list)
+        result = provider.search("*", {"has_gpu": False, "vram_total": 0, "ram_total": 16})
+        assert isinstance(result, SearchResult)
+        assert isinstance(result.results, list)
+        assert isinstance(result.errors, list)
 
     def test_list_installed_returns_list(self):
         from providers.lmstudio_provider import LMStudioProvider
@@ -102,13 +110,15 @@ class TestDockerProvider:
         result = provider.detect()
         assert isinstance(result, bool)
 
-    def test_search_returns_tuple(self):
+    def test_search_returns_search_result(self):
+        from providers.base import SearchResult
         from providers.docker_provider import DockerProvider
 
         provider = DockerProvider()
-        results, errors = provider.search("*", {"has_gpu": False, "vram_total": 0, "ram_total": 16})
-        assert isinstance(results, list)
-        assert isinstance(errors, list)
+        result = provider.search("*", {"has_gpu": False, "vram_total": 0, "ram_total": 16})
+        assert isinstance(result, SearchResult)
+        assert isinstance(result.results, list)
+        assert isinstance(result.errors, list)
 
 
 # ---------------------------------------------------------------------------
@@ -130,13 +140,15 @@ class TestMLXProvider:
         with patch("providers.mlx_provider.platform.system", return_value="Windows"):
             assert provider.detect() is False
 
-    def test_search_returns_tuple(self):
+    def test_search_returns_search_result(self):
+        from providers.base import SearchResult
         from providers.mlx_provider import MLXProvider
 
         provider = MLXProvider()
-        results, errors = provider.search("*", {"has_gpu": False, "vram_total": 0, "ram_total": 16})
-        assert isinstance(results, list)
-        assert isinstance(errors, list)
+        result = provider.search("*", {"has_gpu": False, "vram_total": 0, "ram_total": 16})
+        assert isinstance(result, SearchResult)
+        assert isinstance(result.results, list)
+        assert isinstance(result.errors, list)
 
     def test_list_installed_returns_list(self):
         from providers.mlx_provider import MLXProvider

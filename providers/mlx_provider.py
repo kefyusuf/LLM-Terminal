@@ -21,6 +21,7 @@ from core.utils import (
     infer_quant_from_name,
 )
 from providers import BaseProvider
+from providers.base import SearchResult
 
 # Common MLX model cache locations
 _MLX_CACHE_PATHS = [
@@ -60,7 +61,7 @@ class MLXProvider(BaseProvider):
         specs: dict[str, Any],
         limit: int = 15,
         **kwargs: Any,
-    ) -> tuple[list[dict[str, Any]], list[str]]:
+    ) -> SearchResult:
         """Search locally cached MLX models."""
         results: list[dict[str, Any]] = []
         errors: list[str] = []
@@ -125,7 +126,7 @@ class MLXProvider(BaseProvider):
                 if len(results) >= limit:
                     break
 
-        return results, errors
+        return SearchResult(results=results, errors=errors, has_more_pages=len(results) > limit)
 
     def list_installed(self) -> list[str]:
         """List locally cached MLX models."""

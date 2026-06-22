@@ -21,11 +21,12 @@ from app.search_results_state import SearchResultsState
 from core import cache_db
 from core.logging_ import get_logger
 from core.model_intelligence import plan_hardware_for_model
-from providers import get_all_provider_classes, get_provider_filter_labels
+from providers import SearchResult, get_all_provider_classes, get_provider_filter_labels
+from providers.hf_provider import HuggingFaceProvider
+from providers.ollama_provider import OllamaProvider
 from terminal_ui.themes import THEMES, next_theme, theme_css
 from core.hardware import HardwareMonitor, check_ollama_running
-from providers.hf_provider import enrich_hf_model_details, search_hf_models
-from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
+from providers.hf_provider import enrich_hf_model_details
 from results.results_layout import column_keys_for_width, compute_column_widths
 from results.results_presenter import (
     download_cell_markup,
@@ -249,6 +250,8 @@ class AIModelViewer(App):
         self._color_theme = config.settings.theme
         self.ollama_running = False
         self.hf_model_info_cache = {}
+        self.ollama_provider = OllamaProvider()
+        self.hf_provider = HuggingFaceProvider(model_info_cache=self.hf_model_info_cache)
         self.search_cache = SearchCache(
             ttl_seconds=config.settings.search_cache_ttl_seconds,
             max_entries=config.settings.search_cache_max_entries,
@@ -1355,20 +1358,6 @@ class AIModelViewer(App):
         hf_results, hf_errors = [], []
         extra_results, extra_errors = [], []
 
-        local_models = []
-        if "ollama" in providers:
-            self.call_from_thread(self.on_search_progress, search_id, "Checking Ollama runtime...")
-            ollama_running = check_ollama_running()
-            if ollama_running:
-                self.call_from_thread(
-                    self.on_search_progress, search_id, "Fetching installed models..."
-                )
-                local_models = get_installed_ollama_models()
-            else:
-                self.call_from_thread(
-                    self.on_search_progress, search_id, "Ollama not running; skipping..."
-                )
-
         if search_id != self.active_search_id:
             return
 
@@ -1377,24 +1366,25 @@ class AIModelViewer(App):
 
         def _search_ollama():
             if _is_cancelled():
-                return [], [], False
+                return SearchResult.empty()
             self.call_from_thread(self.on_search_progress, search_id, "Fetching Ollama data...")
             page_size = config.settings.ollama_search_limit
-            return search_ollama_models(query, specs, local_models, page=self.current_page, page_size=page_size)
+            return self.ollama_provider.search_with_installed(
+                query, specs, limit=page_size, page=self.current_page
+            )
 
         def _search_hf():
             if _is_cancelled():
-                return [], []
+                return SearchResult.empty()
             self.call_from_thread(self.on_search_progress, search_id, "Fetching Hugging Face data...")
-            offset = self.current_page * self.page_size
-            return search_hf_models(
-                query, specs, self.hf_model_info_cache,
-                limit=self.page_size, offset=offset, hf_token=config.settings.hf_token,
+            return self.hf_provider.search(
+                query, specs, limit=self.page_size,
+                page=self.current_page, hf_token=config.settings.hf_token,
             )
 
         def _search_extra(slug):
             if _is_cancelled():
-                return [], []
+                return SearchResult.empty()
             for provider_cls in get_all_provider_classes():
                 if provider_cls.slug == slug:
                     self.call_from_thread(
@@ -1403,8 +1393,8 @@ class AIModelViewer(App):
                     instance = provider_cls()
                     if instance.detect():
                         return instance.search(query, specs, limit=self.page_size)
-                    return [], [f"{slug} not reachable"]
-            return [], []
+                    return SearchResult(errors=[f"{slug} not reachable"])
+            return SearchResult.empty()
 
         futures = {}
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -1422,18 +1412,16 @@ class AIModelViewer(App):
                     return
                 label = futures[future]
                 try:
-                    result = future.result()
+                    result: SearchResult = future.result()
                     if label == "ollama":
-                        if len(result) == 3:
-                            ollama_results, ollama_errors, _ = result
-                        else:
-                            ollama_results, ollama_errors = result
+                        ollama_results = result.results
+                        ollama_errors = result.errors
                     elif label == "huggingface":
-                        hf_results, hf_errors = result
+                        hf_results = result.results
+                        hf_errors = result.errors
                     else:
-                        p_results, p_errors = result
-                        extra_results.extend(p_results)
-                        extra_errors.extend(p_errors)
+                        extra_results.extend(result.results)
+                        extra_errors.extend(result.errors)
                 except Exception:
                     if label == "ollama":
                         ollama_errors.append("Ollama search failed")

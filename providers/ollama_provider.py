@@ -17,6 +17,73 @@ from core.utils import (
     infer_quant_from_name,
     parse_retry_after_seconds,
 )
+from providers.base import SearchResult
+
+
+class OllamaProvider:
+    """Class adapter wrapping the module-level :func:`search_ollama_models`.
+
+    Holds the local-models set so it can be passed into
+    :func:`search_ollama_models` from the polymorphic
+    :meth:`search_with_installed` path. ``refresh_installed()`` is
+    called by the orchestrator at the start of a search.
+    """
+
+    slug = "ollama"
+    display_name = "Ollama"
+    default_host = "http://localhost:11434"
+
+    def __init__(self):
+        self.installed: list[str] = []
+
+    def detect(self) -> bool:
+        try:
+            from core.hardware import check_ollama_running
+
+            return check_ollama_running()
+        except Exception:
+            return False
+
+    def refresh_installed(self) -> None:
+        self.installed = get_installed_ollama_models()
+
+    def search(
+        self,
+        query: str,
+        specs: dict,
+        limit: int = 20,
+        *,
+        page: int = 0,
+        **kwargs,
+    ) -> SearchResult:
+        results, errors, has_more = search_ollama_models(
+            query,
+            specs,
+            self.installed,
+            page=page,
+            page_size=limit,
+        )
+        return SearchResult(
+            results=results,
+            errors=errors,
+            has_more_pages=has_more,
+        )
+
+    def list_installed(self) -> list[str]:
+        return self.installed
+
+    def search_with_installed(
+        self,
+        query: str,
+        specs: dict,
+        limit: int = 20,
+        *,
+        page: int = 0,
+        **kwargs,
+    ) -> SearchResult:
+        if not self.installed:
+            self.refresh_installed()
+        return self.search(query, specs, limit=limit, page=page, **kwargs)
 
 _ollama_meta_cache_lock = threading.Lock()
 
