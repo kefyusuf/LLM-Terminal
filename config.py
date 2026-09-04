@@ -1,4 +1,5 @@
 import shutil
+from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
@@ -27,10 +28,8 @@ def _default_data_file(filename: str) -> Path:
         return target
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    try:
+    with suppress(FileExistsError):
         shutil.copy2(legacy, target)
-    except FileExistsError:
-        pass
     return target
 
 
