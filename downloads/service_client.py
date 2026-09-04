@@ -5,15 +5,21 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import config
+
 try:
     import psutil
 except ImportError:  # pragma: no cover - exercised only in lightweight envs
     psutil = None
 
-SERVICE_HOST = "127.0.0.1"
-SERVICE_PORT = 8765
-SERVICE_BASE_URL = f"http://{SERVICE_HOST}:{SERVICE_PORT}"
 MIN_SERVICE_VERSION = "1.7"
+
+
+def service_base_url():
+    """Return the configured download-service base URL."""
+    host = config.settings.download_service_host
+    port = config.settings.download_service_port
+    return f"http://{host}:{port}"
 
 
 def _parse_version(version_str):
@@ -33,7 +39,7 @@ def _request(method, path, payload=None, timeout=2.0):
 
     Raises any network or HTTP errors to the caller.
     """
-    url = f"{SERVICE_BASE_URL}{path}"
+    url = f"{service_base_url()}{path}"
     data = None
     headers = {"Content-Type": "application/json"}
     if payload is not None:
