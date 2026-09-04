@@ -113,3 +113,34 @@ def test_multi_provider_search_reports_total_merged_result_count():
 
     assert len(outcome.results) == 3
     assert outcome.result_count == 3
+
+
+def test_cancelled_search_reports_count_for_collected_results():
+    checks = 0
+
+    def cancel_after_result_collection() -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 4
+
+    orchestrator = SearchOrchestrator(
+        monitor=MonitorStub(),
+        ollama_provider=StaticProvider(SearchResult()),
+        hf_provider=StaticProvider(
+            SearchResult(results=[{"id": "hf-1"}, {"id": "hf-2"}])
+        ),
+        on_progress=lambda *_args: None,
+        cancel_check=cancel_after_result_collection,
+    )
+
+    outcome = orchestrator.search(
+        search_id=2,
+        query="coder",
+        providers=["huggingface"],
+        page=0,
+        page_size=10,
+    )
+
+    assert outcome.cancelled is True
+    assert len(outcome.results) == 2
+    assert outcome.result_count == 2
