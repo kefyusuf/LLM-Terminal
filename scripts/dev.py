@@ -127,6 +127,9 @@ def install_lockfile(venv_python: Path, lockfile: Path, root: Path) -> None:
 
 
 def install_project(venv_python: Path, root: Path) -> None:
+    if not (root / "pyproject.toml").exists():
+        return
+
     subprocess.run(
         [str(venv_python), "-m", "pip", "install", "--no-deps", "-e", "."],
         check=True,
