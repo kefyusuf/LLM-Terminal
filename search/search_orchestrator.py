@@ -185,9 +185,11 @@ class SearchOrchestrator:
 
             for future in as_completed(futures):
                 if self.cancel_check():
+                    partial_results = ollama_results + hf_results + extra_results
                     return SearchOutcome(
-                        results=ollama_results + hf_results + extra_results,
+                        results=partial_results,
                         errors=ollama_errors + hf_errors + extra_errors,
+                        result_count=len(partial_results),
                         providers=list(providers),
                         cancelled=True,
                     )
@@ -214,9 +216,11 @@ class SearchOrchestrator:
                     extra_errors.extend(result.errors)
 
         if self.cancel_check():
+            partial_results = ollama_results + hf_results + extra_results
             return SearchOutcome(
-                results=ollama_results + hf_results + extra_results,
+                results=partial_results,
                 errors=ollama_errors + hf_errors + extra_errors,
+                result_count=len(partial_results),
                 providers=list(providers),
                 cancelled=True,
             )
