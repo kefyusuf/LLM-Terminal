@@ -47,18 +47,27 @@ class HuggingFaceProvider:
         **kwargs,
     ) -> SearchResult:
         offset = page * limit
-        results, errors = search_hf_models(
+        response = search_hf_models(
             query,
             specs,
             self.model_info_cache,
             limit=limit,
             offset=offset,
             hf_token=hf_token,
+            lookahead=1,
+            return_page_info=True,
         )
+        if len(response) == 3:
+            results, errors, has_more_pages = response
+        else:
+            # Backward-compatible fallback for patched/test doubles that still
+            # return the historical two-item tuple.
+            results, errors = response
+            has_more_pages = len(results) > limit
         return SearchResult(
-            results=results,
+            results=results[:limit],
             errors=list(errors),
-            has_more_pages=len(results) >= limit,
+            has_more_pages=has_more_pages,
         )
 
     def list_installed(self) -> list[str]:
@@ -148,43 +157,63 @@ def search_hf_models(
     limit=15,
     offset=0,
     hf_token=None,
+    lookahead=0,
+    return_page_info=False,
 ):
     """Search Hugging Face for GGUF models matching *query*.
+
+    Pagination is based on the raw Hugging Face result window, not the
+    compacted list of successfully parsed models. This keeps page boundaries
+    stable when one model in the current page cannot be parsed.
 
     Args:
         query: Free-text search string.
         specs: Hardware specification dict.
         model_info_cache: Shared ``{repo_id: HfApi.model_info}`` cache dict.
-        limit: Maximum number of results to return per page.
-        offset: Number of results to skip (for pagination).
+        limit: Maximum number of page results requested.
+        offset: Number of raw results to skip (for pagination).
         hf_token: Optional HuggingFace API token for higher rate limits.
+        lookahead: Extra raw results to fetch after the page for boundary detection.
+        return_page_info: Include a third ``has_more_pages`` value when true.
 
     Returns:
-        ``(results: list[dict], errors: list[str], total_count: int)``.
+        Normally ``(results, errors)`` for backward compatibility. When
+        ``return_page_info`` is true, returns ``(results, errors, has_more_pages)``.
     """
     results = []
     errors = []
     found_keys = set()
+    window_size = limit + max(int(lookahead), 0)
+
+    def _return(has_more_pages=False):
+        if return_page_info:
+            return results, errors, has_more_pages
+        return results, errors
 
     try:
         api = HfApi(token=hf_token) if hf_token else HfApi()
         hf_models_iter = api.list_models(
             search=query,
             sort="downloads",
-            limit=limit * 10,
+            limit=offset + window_size,
             filter="gguf",
             expand=["likes", "siblings", "downloads"],
         )
-        hf_models = list(hf_models_iter)[offset : offset + limit]
+        raw_window = list(hf_models_iter)[offset : offset + window_size]
     except HfHubHTTPError as exc:
-        msg = _format_hf_http_error(exc)
-        return results, [msg]
+        errors.append(_format_hf_http_error(exc))
+        return _return()
     except RequestException as exc:
-        return results, [f"Hugging Face search failed: {exc}"]
+        errors.append(f"Hugging Face search failed: {exc}")
+        return _return()
     except (ValueError, OSError) as exc:
-        return results, [f"Hugging Face search failed: {exc}"]
+        errors.append(f"Hugging Face search failed: {exc}")
+        return _return()
 
-    for model in hf_models:
+    has_more_pages = len(raw_window) > limit
+    page_models = raw_window[:limit]
+
+    for model in page_models:
         try:
             repo_id = _repo_id_from_model(model)
             if not repo_id:
@@ -254,7 +283,7 @@ def search_hf_models(
         ) as exc:
             errors.append(f"Hugging Face model parse failed: {exc}")
 
-    return results, errors
+    return _return(has_more_pages)
 
 
 def enrich_hf_model_details(model, specs, model_info_cache):
