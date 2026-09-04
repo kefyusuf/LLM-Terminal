@@ -48,10 +48,10 @@ class HuggingFaceProvider:
     ) -> SearchResult:
         """
         Search Hugging Face models matching the query and hardware specifications.
-        
+
         Parameters:
             page (int): Zero-based result page to retrieve.
-        
+
         Returns:
             SearchResult: Matching models, any search errors, and pagination information.
         """
@@ -171,7 +171,7 @@ def search_hf_models(
 ):
     """
     Search Hugging Face for GGUF models matching a query.
-    
+
     Args:
         query: Free-text search string.
         specs: Hardware specification dictionary used to determine model fit.
@@ -181,7 +181,7 @@ def search_hf_models(
         hf_token: Optional Hugging Face API token.
         lookahead: Number of additional raw results to fetch for page-boundary detection.
         return_page_info: Whether to include the page-availability flag in the return value.
-    
+
     Returns:
         A tuple containing the parsed model results and parsing or request errors.
         When `return_page_info` is true, includes a third boolean indicating whether
@@ -195,10 +195,10 @@ def search_hf_models(
     def _return(has_more_pages=False):
         """
         Package search results with optional pagination information.
-        
+
         Parameters:
             has_more_pages (bool): Whether additional result pages are available.
-        
+
         Returns:
             tuple: Search results and errors, optionally followed by a pagination flag.
         """
@@ -305,12 +305,12 @@ def search_hf_models(
 def enrich_hf_model_details(model, specs, model_info_cache):
     """
     Enrich a Hugging Face model result with exact GGUF file details.
-    
+
     Parameters:
         model (dict): Model result to update in place.
         specs: Hardware specifications used to calculate fit and operating mode.
         model_info_cache: Optional cache for Hugging Face repository metadata.
-    
+
     Returns:
         dict: The updated model result, or the original result when repository or file metadata is unavailable.
     """
