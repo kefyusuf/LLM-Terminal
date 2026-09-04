@@ -16,14 +16,17 @@ def build_download_command(model):
     """Build the subprocess command list needed to download *model*.
 
     Raises:
-        ValueError: If ``model["source"]`` is not a supported provider.
+        ValueError: If the model is missing required provider download metadata.
     """
     source = model.get("source")
     if source == "Hugging Face":
         repo_id = model.get("id") or model.get("name")
         if not repo_id:
             raise ValueError("missing Hugging Face repository id")
-        return ["hf_api_download", repo_id]
+        target_file = model.get("target_file")
+        if not target_file:
+            raise ValueError("missing Hugging Face target file")
+        return ["hf_api_download", repo_id, target_file]
 
     if source == "Ollama":
         model_name = model.get("name")
