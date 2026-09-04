@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from urllib.error import URLError
+from requests.exceptions import ConnectionError
 
 
 def test_download_service_client_uses_configured_host_and_port(monkeypatch):
@@ -67,7 +67,7 @@ def test_ollama_detect_returns_false_when_api_unreachable(monkeypatch):
 
     class SessionStub:
         def get(self, url, timeout):
-            raise URLError("offline")
+            raise ConnectionError("offline")
 
     monkeypatch.setattr(ollama_provider, "get_session", lambda: SessionStub())
 
