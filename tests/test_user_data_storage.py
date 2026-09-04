@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 
 def test_default_data_dir_uses_platformdirs(monkeypatch, tmp_path):
     import config
