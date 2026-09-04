@@ -101,7 +101,13 @@ class TestClaimNextQueued:
         assert claimed is None
 
     def test_skips_active_jobs(self, store):
-        model = {"source": "Hugging Face", "name": "test/model", "publisher": "test", "id": "test/model"}
+        model = {
+            "source": "Hugging Face",
+            "name": "test/model",
+            "publisher": "test",
+            "id": "test/model",
+            "target_file": "model.Q4_K_M.gguf",
+        }
         job, _ = store.upsert_job(model)
         store.update_job(job["target_id"], status="running", detail="Downloading")
 
@@ -134,7 +140,15 @@ class TestGetJobByTarget:
 class TestListJobs:
     def test_lists_all_jobs(self, store):
         store.upsert_job({"source": "Ollama", "name": "a", "publisher": "ollama"})
-        store.upsert_job({"source": "Hugging Face", "name": "b", "publisher": "x", "id": "b"})
+        store.upsert_job(
+            {
+                "source": "Hugging Face",
+                "name": "b",
+                "publisher": "x",
+                "id": "b",
+                "target_file": "b.Q4_K_M.gguf",
+            }
+        )
         jobs = store.list_jobs(limit=10)
         assert len(jobs) == 2
 
