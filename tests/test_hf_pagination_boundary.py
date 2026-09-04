@@ -39,10 +39,10 @@ def test_parse_failure_does_not_pull_lookahead_into_current_page():
     class FakeModel:
         likes = 0
         downloads = 0
-        siblings = []
 
         def __init__(self, model_id):
             self.modelId = model_id
+            self.siblings = []
 
     raw_models = [
         FakeModel(None),
