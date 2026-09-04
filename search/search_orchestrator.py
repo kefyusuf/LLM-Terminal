@@ -33,10 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 from providers import SearchResult, get_all_provider_classes
-from search.search_orchestration import (
-    has_more_pages_for_results,
-    provider_result_count,
-)
+from search.search_orchestration import has_more_pages_for_results
 
 
 @dataclass
@@ -51,8 +48,8 @@ class SearchOutcome:
         has_more_pages: True if pagination should enable the
             "Next" button. Computed by
             :func:`search.search_orchestration.has_more_pages_for_results`.
-        result_count: Number of results to report in the status
-            message (depends on the selected provider).
+        result_count: Number of merged results to report in the status
+            message.
         providers: Echo of the providers list, for downstream
             status-message builders.
         cancelled: True if the search was cancelled before all
@@ -188,9 +185,11 @@ class SearchOrchestrator:
 
             for future in as_completed(futures):
                 if self.cancel_check():
+                    partial_results = ollama_results + hf_results + extra_results
                     return SearchOutcome(
-                        results=ollama_results + hf_results + extra_results,
+                        results=partial_results,
                         errors=ollama_errors + hf_errors + extra_errors,
+                        result_count=len(partial_results),
                         providers=list(providers),
                         cancelled=True,
                     )
@@ -217,9 +216,11 @@ class SearchOrchestrator:
                     extra_errors.extend(result.errors)
 
         if self.cancel_check():
+            partial_results = ollama_results + hf_results + extra_results
             return SearchOutcome(
-                results=ollama_results + hf_results + extra_results,
+                results=partial_results,
                 errors=ollama_errors + hf_errors + extra_errors,
+                result_count=len(partial_results),
                 providers=list(providers),
                 cancelled=True,
             )
@@ -232,11 +233,7 @@ class SearchOrchestrator:
             ollama_result_count=len(ollama_results),
             page_size=page_size,
         )
-        result_count = provider_result_count(
-            providers,
-            hf_result_count=len(hf_results),
-            ollama_result_count=len(ollama_results),
-        )
+        result_count = len(results)
 
         return SearchOutcome(
             results=results,

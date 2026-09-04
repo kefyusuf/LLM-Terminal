@@ -100,7 +100,15 @@ class LMStudioProvider(BaseProvider):
 
     def list_installed(self) -> list[str]:
         """Return list of model names loaded in LM Studio."""
-        return [m["name"] for m in self._parse_models({})]
+        try:
+            resp = get_session().get(f"{self.host}/v1/models", timeout=2)
+            if resp.status_code != 200:
+                return []
+            models = self._parse_models(resp.json())
+        except (RequestException, ValueError, TypeError, AttributeError):
+            return []
+
+        return [model["name"] for model in models if model.get("name")]
 
     def search_with_installed(
         self, query: str, specs: dict, limit: int = 20, **kwargs: Any

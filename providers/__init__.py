@@ -173,7 +173,7 @@ def get_provider_filter_labels() -> list[str]:
     for provider_cls in get_all_provider_classes():
         try:
             instance = provider_cls()
-            if instance.detect():
+            if instance.detect() and instance.display_name not in labels:
                 labels.append(instance.display_name)
         except Exception:
             logger.debug("Provider {} filter label detection failed, skipping", provider_cls.__name__)
