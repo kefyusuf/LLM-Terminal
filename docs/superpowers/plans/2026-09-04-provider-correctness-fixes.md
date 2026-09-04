@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Correct four low-risk provider/search behaviors and remove committed coverage artifacts without changing public interfaces.
+**Goal:** Correct three low-risk provider/search behaviors and remove committed coverage artifacts without changing public interfaces.
 
 **Architecture:** Keep the existing provider registry and search orchestration structure. Add focused regression tests first, then apply minimal fixes in the owning modules. Repository hygiene changes remain separate from runtime behavior.
 
@@ -28,10 +28,10 @@
 - Consumes: `providers.get_provider_filter_labels()`, `LMStudioProvider.list_installed()`, `SearchOrchestrator.search()`.
 - Produces: Regression coverage for duplicate labels, LM Studio model discovery, and multi-provider result counts.
 
-- [ ] Write a failing test proving provider filter labels remain unique when built-in providers are also returned by the registry.
-- [ ] Write a failing test proving LM Studio loaded models are fetched from `/v1/models`.
-- [ ] Write a failing test proving multi-provider searches report the total merged result count.
-- [ ] Run the new test file and verify the three failures are caused by the current production behavior.
+- [x] Write a failing test proving provider filter labels remain unique when built-in providers are also returned by the registry.
+- [x] Write a failing test proving LM Studio loaded models are fetched from `/v1/models`.
+- [x] Write a failing test proving multi-provider searches report the total merged result count.
+- [x] Run the new test file and verify the three failures are caused by the current production behavior.
 
 ### Task 2: Apply minimal provider/search fixes
 
@@ -44,10 +44,10 @@
 - Consumes: Existing provider registry, shared HTTP session, `SearchOutcome`.
 - Produces: Unique filter labels, accurate LM Studio installed-model lists, accurate merged result counts.
 
-- [ ] Prevent duplicate display names while preserving provider order.
-- [ ] Fetch and parse LM Studio `/v1/models` in `list_installed()`, returning `[]` on request, JSON, or payload failures.
-- [ ] Use `len(results)` for result counts when more than one provider is selected.
-- [ ] Run the regression test file and verify it passes.
+- [x] Prevent duplicate display names while preserving provider order.
+- [x] Fetch and parse LM Studio `/v1/models` in `list_installed()`, returning `[]` on request, JSON, or payload failures.
+- [x] Use `len(results)` for merged result counts.
+- [x] Run the regression test file and verify it passes.
 
 ### Task 3: Remove coverage artifacts
 
@@ -58,8 +58,8 @@
 **Interfaces:**
 - Produces: Repository ignores local coverage databases and generated reports.
 
-- [ ] Add `.coverage`, `.coverage.*`, `coverage.xml`, and `htmlcov/` ignore rules.
-- [ ] Delete the tracked `.coverage` artifact.
+- [x] Add `.coverage`, `.coverage.*`, `coverage.xml`, and `htmlcov/` ignore rules.
+- [x] Delete the tracked `.coverage` artifact.
 
 ### Task 4: Verify and publish
 
@@ -69,7 +69,7 @@
 **Interfaces:**
 - Produces: Reviewable pull request against `main`.
 
-- [ ] Run targeted regression tests.
-- [ ] Run the repository verify lane in CI.
-- [ ] Review the complete branch diff for scope creep.
-- [ ] Open a pull request with behavior, test, and risk notes.
+- [x] Run targeted regression tests.
+- [x] Run the repository verify lane in CI.
+- [x] Review the complete branch diff for scope creep.
+- [x] Open a pull request with behavior, test, and risk notes.
