@@ -3,6 +3,7 @@
 import json
 import threading
 import time
+import urllib.error
 import urllib.request
 from unittest.mock import patch
 
@@ -91,6 +92,16 @@ def _get(path, port):
         return json.loads(resp.read().decode())
 
 
+def _get_error(path, port):
+    """Return the JSON body and status code for an expected HTTP error."""
+    url = f"http://{DEFAULT_HOST}:{port}{path}"
+    req = urllib.request.Request(url)
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req, timeout=5)
+    payload = json.loads(exc_info.value.read().decode())
+    return exc_info.value.code, payload
+
+
 class TestHealthEndpoint:
     def test_health_ok(self, api_server):
         _, port = api_server
@@ -136,6 +147,20 @@ class TestModelsEndpoint:
             assert "quality" in model["scores"]
             assert "composite" in model["scores"]
 
+    @pytest.mark.parametrize("provider", ["unknown", "docker", "mlx"])
+    def test_models_reject_unknown_provider(self, api_server, provider):
+        _, port = api_server
+        status, data = _get_error(f"/api/v1/models?provider={provider}", port)
+        assert status == 400
+        assert "provider" in data["error"].lower()
+
+    @pytest.mark.parametrize("limit", ["0", "-1", "101"])
+    def test_models_reject_out_of_range_limit(self, api_server, limit):
+        _, port = api_server
+        status, data = _get_error(f"/api/v1/models?limit={limit}", port)
+        assert status == 400
+        assert "limit" in data["error"].lower()
+
 
 class TestPlanEndpoint:
     def test_plan_returns_hardware_requirements(self, api_server):
@@ -149,6 +174,13 @@ class TestPlanEndpoint:
         _, port = api_server
         data = _get("/api/v1/models/llama-3-8b/plan?context=32768", port)
         assert data["context_length"] == 32768
+
+    @pytest.mark.parametrize("context", ["0", "-1"])
+    def test_plan_rejects_non_positive_context(self, api_server, context):
+        _, port = api_server
+        status, data = _get_error(f"/api/v1/models/llama-3-8b/plan?context={context}", port)
+        assert status == 400
+        assert "context" in data["error"].lower()
 
 
 class TestScoresEndpoint:
