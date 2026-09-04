@@ -46,6 +46,15 @@ class HuggingFaceProvider:
         hf_token: str | None = None,
         **kwargs,
     ) -> SearchResult:
+        """
+        Search Hugging Face models matching the query and hardware specifications.
+        
+        Parameters:
+            page (int): Zero-based result page to retrieve.
+        
+        Returns:
+            SearchResult: Matching models, any search errors, and pagination information.
+        """
         offset = page * limit
         response = search_hf_models(
             query,
@@ -160,25 +169,23 @@ def search_hf_models(
     lookahead=0,
     return_page_info=False,
 ):
-    """Search Hugging Face for GGUF models matching *query*.
-
-    Pagination is based on the raw Hugging Face result window, not the
-    compacted list of successfully parsed models. This keeps page boundaries
-    stable when one model in the current page cannot be parsed.
-
+    """
+    Search Hugging Face for GGUF models matching a query.
+    
     Args:
         query: Free-text search string.
-        specs: Hardware specification dict.
-        model_info_cache: Shared ``{repo_id: HfApi.model_info}`` cache dict.
-        limit: Maximum number of page results requested.
-        offset: Number of raw results to skip (for pagination).
-        hf_token: Optional HuggingFace API token for higher rate limits.
-        lookahead: Extra raw results to fetch after the page for boundary detection.
-        return_page_info: Include a third ``has_more_pages`` value when true.
-
+        specs: Hardware specification dictionary used to determine model fit.
+        model_info_cache: Shared cache for Hugging Face repository metadata.
+        limit: Maximum number of models to process.
+        offset: Number of raw search results to skip.
+        hf_token: Optional Hugging Face API token.
+        lookahead: Number of additional raw results to fetch for page-boundary detection.
+        return_page_info: Whether to include the page-availability flag in the return value.
+    
     Returns:
-        Normally ``(results, errors)`` for backward compatibility. When
-        ``return_page_info`` is true, returns ``(results, errors, has_more_pages)``.
+        A tuple containing the parsed model results and parsing or request errors.
+        When `return_page_info` is true, includes a third boolean indicating whether
+        additional raw results are available.
     """
     results = []
     errors = []
@@ -186,6 +193,15 @@ def search_hf_models(
     window_size = limit + max(int(lookahead), 0)
 
     def _return(has_more_pages=False):
+        """
+        Package search results with optional pagination information.
+        
+        Parameters:
+            has_more_pages (bool): Whether additional result pages are available.
+        
+        Returns:
+            tuple: Search results and errors, optionally followed by a pagination flag.
+        """
         if return_page_info:
             return results, errors, has_more_pages
         return results, errors
@@ -287,11 +303,16 @@ def search_hf_models(
 
 
 def enrich_hf_model_details(model, specs, model_info_cache):
-    """Enrich a search result *model* dict with exact file size from the HF API.
-
-    Fetches ``model_info`` (with ``files_metadata=True``) to resolve the
-    target GGUF file size and update ``size``, ``fit``, ``mode``, and
-    ``quant`` fields in-place.  Returns the (possibly unchanged) dict.
+    """
+    Enrich a Hugging Face model result with exact GGUF file details.
+    
+    Parameters:
+        model (dict): Model result to update in place.
+        specs: Hardware specifications used to calculate fit and operating mode.
+        model_info_cache: Optional cache for Hugging Face repository metadata.
+    
+    Returns:
+        dict: The updated model result, or the original result when repository or file metadata is unavailable.
     """
     repo_id = model.get("id")
     if not repo_id:
