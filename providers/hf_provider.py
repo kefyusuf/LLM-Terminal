@@ -54,11 +54,12 @@ class HuggingFaceProvider:
             limit=limit,
             offset=offset,
             hf_token=hf_token,
+            lookahead=1,
         )
         return SearchResult(
-            results=results,
+            results=results[:limit],
             errors=list(errors),
-            has_more_pages=len(results) >= limit,
+            has_more_pages=len(results) > limit,
         )
 
     def list_installed(self) -> list[str]:
@@ -148,6 +149,7 @@ def search_hf_models(
     limit=15,
     offset=0,
     hf_token=None,
+    lookahead=0,
 ):
     """Search Hugging Face for GGUF models matching *query*.
 
@@ -155,27 +157,29 @@ def search_hf_models(
         query: Free-text search string.
         specs: Hardware specification dict.
         model_info_cache: Shared ``{repo_id: HfApi.model_info}`` cache dict.
-        limit: Maximum number of results to return per page.
+        limit: Maximum number of page results requested.
         offset: Number of results to skip (for pagination).
         hf_token: Optional HuggingFace API token for higher rate limits.
+        lookahead: Extra results to fetch after the page for boundary detection.
 
     Returns:
-        ``(results: list[dict], errors: list[str], total_count: int)``.
+        ``(results: list[dict], errors: list[str])``.
     """
     results = []
     errors = []
     found_keys = set()
+    window_size = limit + max(int(lookahead), 0)
 
     try:
         api = HfApi(token=hf_token) if hf_token else HfApi()
         hf_models_iter = api.list_models(
             search=query,
             sort="downloads",
-            limit=limit * 10,
+            limit=offset + window_size,
             filter="gguf",
             expand=["likes", "siblings", "downloads"],
         )
-        hf_models = list(hf_models_iter)[offset : offset + limit]
+        hf_models = list(hf_models_iter)[offset : offset + window_size]
     except HfHubHTTPError as exc:
         msg = _format_hf_http_error(exc)
         return results, [msg]
