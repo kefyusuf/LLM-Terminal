@@ -23,12 +23,15 @@ def _make_store(tmp_path):
 
 
 def _make_model(target_id: str = "test/repo", source: str = "Hugging Face", name: str = "test/repo"):
-    return {
+    model = {
         "source": source,
         "publisher": "test",
         "id": target_id,
         "name": name,
     }
+    if source == "Hugging Face":
+        model["target_file"] = "model.Q4_K_M.gguf"
+    return model
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +178,15 @@ def test_delete_missing_job_returns_not_found(tmp_path):
 def test_normalize_target_ids_collapses_duplicates(tmp_path):
     store = _make_store(tmp_path)
     # Insert two rows that should normalize to the same target_id
-    store.upsert_job({"source": "Hugging Face", "publisher": "x", "id": "owner/repo", "name": "owner/repo"})
+    store.upsert_job(
+        {
+            "source": "Hugging Face",
+            "publisher": "x",
+            "id": "owner/repo",
+            "name": "owner/repo",
+            "target_file": "model.Q4_K_M.gguf",
+        }
+    )
     # Force a different format that should normalize to the same canonical form
     with store.lock, store._connect() as conn:
         conn.execute(
