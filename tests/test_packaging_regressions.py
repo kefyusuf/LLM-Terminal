@@ -27,6 +27,10 @@ def test_pyproject_uses_supported_setuptools_backend():
 def test_bootstrap_installs_project_after_platform_lock(tmp_path, monkeypatch):
     dev = _load_dev_module()
     (tmp_path / "requirements-dev-linux.txt").write_text("pytest==8.4.2\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        "[build-system]\nrequires = ['setuptools>=68']\nbuild-backend = 'setuptools.build_meta'\n",
+        encoding="utf-8",
+    )
 
     venv_python = tmp_path / ".venv" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
