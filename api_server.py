@@ -35,6 +35,8 @@ from providers.ollama_provider import get_installed_ollama_models, search_ollama
 API_VERSION = "1.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
+VALID_MODEL_PROVIDERS = {"all", "ollama", "huggingface"}
+MAX_MODEL_LIMIT = 100
 
 
 def smoke_mode_enabled() -> bool:
@@ -121,10 +123,23 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
     def _handle_models(self, params):
         query = params.get("search", [""])[0]
         provider = params.get("provider", ["all"])[0].lower()
+        if provider not in VALID_MODEL_PROVIDERS:
+            return self._error(
+                f"Invalid 'provider' parameter '{provider}'; expected one of: "
+                f"{', '.join(sorted(VALID_MODEL_PROVIDERS))}.",
+                400,
+            )
+
         try:
             limit = int(params.get("limit", ["20"])[0])
         except (ValueError, IndexError):
             return self._error("Invalid 'limit' parameter; expected integer.", 400)
+        if not 1 <= limit <= MAX_MODEL_LIMIT:
+            return self._error(
+                f"Invalid 'limit' parameter; expected integer between 1 and {MAX_MODEL_LIMIT}.",
+                400,
+            )
+
         min_fit = params.get("min_fit", ["all"])[0].lower()
         use_case = params.get("use_case", ["all"])[0].lower()
         sort_by = params.get("sort", ["composite"])[0].lower()
@@ -217,6 +232,9 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
             context = int(params.get("context", ["4096"])[0])
         except (ValueError, IndexError):
             return self._error("Invalid 'context' parameter; expected integer.", 400)
+        if context <= 0:
+            return self._error("Invalid 'context' parameter; expected a positive integer.", 400)
+
         plans = plan_hardware_for_model(model_name, target_context=context)
         self._json_response(
             {
