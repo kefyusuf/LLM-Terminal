@@ -126,6 +126,17 @@ def install_lockfile(venv_python: Path, lockfile: Path, root: Path) -> None:
     )
 
 
+def install_project(venv_python: Path, root: Path) -> None:
+    if not (root / "pyproject.toml").exists():
+        return
+
+    subprocess.run(
+        [str(venv_python), "-m", "pip", "install", "--no-deps", "-e", "."],
+        check=True,
+        cwd=root,
+    )
+
+
 def bootstrap() -> int:
     ensure_supported_python()
     root = project_root()
@@ -135,6 +146,7 @@ def bootstrap() -> int:
     ensure_pip(venv_python, root)
     lockfile = requirement_path(root, select_dev_lock(system_name))
     install_lockfile(venv_python, lockfile, root)
+    install_project(venv_python, root)
     print(f"[bootstrap] installed from {lockfile.relative_to(root).as_posix()}")
     return 0
 
