@@ -3,6 +3,10 @@ __pycache__/
 .ruff_cache/
 .venv/
 *.pyc
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 data/*.db
 .env
 .opencode/
