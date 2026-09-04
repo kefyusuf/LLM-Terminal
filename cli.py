@@ -1,3 +1,5 @@
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 
 import click
 from rich.console import Console
@@ -9,6 +11,14 @@ from core.hardware import HardwareMonitor, check_ollama_running
 from downloads.service_client import get_service_health
 
 console = Console()
+
+
+def get_version() -> str:
+    """Return the installed AI Model Explorer package version."""
+    try:
+        return package_version("ai-model-explorer")
+    except PackageNotFoundError:
+        return "0.0.0+local"
 
 
 @click.group()
@@ -99,7 +109,6 @@ def search(query, provider, limit, sort):
             hf_results, _ = search_hf_models(query, specs, {}, limit=limit)
             results.extend(hf_results)
 
-    # Sort
     if sort == "composite":
         results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
     elif sort == "speed":
@@ -161,7 +170,6 @@ def fit(perfect, limit):
         hf_results, _ = search_hf_models("*", specs, {}, limit=50)
         results.extend(hf_results)
 
-    # Sort by composite score
     results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
 
     if perfect:
@@ -215,7 +223,6 @@ def recommend(limit, use_case, output_json):
         hf_results, _ = search_hf_models("*", specs, {}, limit=50)
         results.extend(hf_results)
 
-    # Filter by use case and fit
     results = [r for r in results if r.get("use_case_key") == use_case or use_case == "general"]
     results = [r for r in results if "no fit" not in r.get("fit", "").lower()]
     results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
@@ -380,18 +387,7 @@ def cache_stats():
 @cli.command()
 def version():
     """Show version information."""
-    from pathlib import Path
-
-    version_file = Path(__file__).parent / "pyproject.toml"
-    version_str = "0.1.0"
-    if version_file.exists():
-        import tomllib
-
-        with open(version_file, "rb") as f:
-            data = tomllib.load(f)
-            version_str = data.get("project", {}).get("version", "0.1.0")
-
-    console.print(f"AI Model Explorer v{version_str}")
+    console.print(f"AI Model Explorer v{get_version()}")
 
 
 if __name__ == "__main__":
