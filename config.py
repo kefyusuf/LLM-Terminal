@@ -1,16 +1,44 @@
+import shutil
+from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
+from platformdirs import user_data_path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+APP_NAME = "ai-model-explorer"
 
-def _default_data_dir() -> Path:
+
+def _legacy_data_dir() -> Path:
     return Path(__file__).resolve().parent / "data"
 
 
+def _default_data_dir() -> Path:
+    return Path(user_data_path(APP_NAME, appauthor=False))
+
+
+def _default_data_file(filename: str) -> Path:
+    target = _default_data_dir() / filename
+    if target.exists():
+        return target
+
+    legacy = _legacy_data_dir() / filename
+    if not legacy.exists():
+        return target
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with suppress(FileExistsError):
+        shutil.copy2(legacy, target)
+    return target
+
+
 def _default_cache_db_path() -> Path:
-    return _default_data_dir() / "cache.db"
+    return _default_data_file("cache.db")
+
+
+def _default_download_db_path() -> Path:
+    return _default_data_file("downloads.db")
 
 
 class Settings(BaseSettings):
@@ -43,6 +71,7 @@ class Settings(BaseSettings):
     ollama_timeout: int = 5
 
     # Download service settings
+    download_db_path: Path = Field(default_factory=_default_download_db_path)
     download_service_host: str = "127.0.0.1"
     download_service_port: int = 8765
     download_history_limit: int = 50

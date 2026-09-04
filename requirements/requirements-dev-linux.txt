@@ -69,7 +69,9 @@ pathspec==1.1.1
 pip-tools==7.5.3
     # via -r requirements/requirements-dev.in
 platformdirs==4.9.6
-    # via textual
+    # via
+    #   -r requirements/requirements.in
+    #   textual
 pluggy==1.6.0
     # via
     #   pytest

@@ -45,7 +45,9 @@ nvidia-ml-py==12.575.51
 packaging==26.2
     # via huggingface-hub
 platformdirs==4.9.6
-    # via textual
+    # via
+    #   -r requirements/requirements.in
+    #   textual
 psutil==6.1.1
     # via -r requirements/requirements.in
 pydantic==2.13.4
