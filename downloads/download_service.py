@@ -33,12 +33,15 @@ from typing import Any
 from loguru import logger
 
 import config
-from config import _default_data_dir
 from downloads.runner import process_job
 from downloads.store import DownloadStore
 
-DB_PATH = _default_data_dir() / "downloads.db"
 SERVICE_VERSION = "1.7"
+
+
+def download_db_path():
+    """Return the configured download-service SQLite path."""
+    return config.settings.download_db_path
 
 
 def service_bind_address() -> tuple[str, int]:
@@ -54,7 +57,7 @@ def smoke_mode_enabled() -> bool:
 
 
 def ensure_data_dir() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    download_db_path().parent.mkdir(parents=True, exist_ok=True)
 
 
 class DownloadServiceState:
@@ -71,7 +74,7 @@ class DownloadServiceState:
     """
 
     def __init__(self):
-        self.store = DownloadStore(DB_PATH)
+        self.store = DownloadStore(download_db_path())
         self.store.normalize_target_ids()
         self.store.migrate_legacy_hf_commands()
         self.store.recover_orphaned_running_jobs()
