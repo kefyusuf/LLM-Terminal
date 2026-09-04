@@ -5,7 +5,7 @@ review (candidate #5). Two runners, both consume a ``DownloadStore``
 + the shared ``STATE`` singleton (imported from ``download_service``):
 
 - :func:`run_hf_download`: ``hf_api_download`` sentinel command →
-  HuggingFace snapshot_download via subprocess.
+  one exact Hugging Face file via subprocess.
 - :func:`run_streamed_command`: every other command (e.g. ``ollama
   pull``) → stdout-streamed subprocess.
 
@@ -63,6 +63,26 @@ def _repo_id_from_hf_command(command) -> str:
     return command[1] if len(command) > 1 else ""
 
 
+def _target_file_from_hf_command(command) -> str:
+    """Extract the exact repository filename from an HF API command payload."""
+    if not is_hf_api_command(command):
+        return ""
+    return command[2] if len(command) > 2 else ""
+
+
+def _hf_download_script() -> str:
+    """Return the subprocess script used to download one exact HF file."""
+    return (
+        "from huggingface_hub import hf_hub_download; "
+        "import sys; "
+        "hf_hub_download("
+        "repo_id=sys.argv[1], "
+        "filename=sys.argv[2], "
+        "local_dir='models'"
+        ")"
+    )
+
+
 def _cancel_requested(state, target_id: str) -> bool:
     latest = state.store.get_job_by_target(target_id)
     return bool(latest and latest.get("cancel_requested"))
@@ -100,23 +120,27 @@ def _finalize_terminal(state, target_id: str, return_code, cancelled: bool, *, l
 
 
 def run_hf_download(state, target_id: str, command) -> None:
-    """Run a HuggingFace snapshot_download for *target_id*.
+    """Download the exact Hugging Face target file for *target_id*.
 
-    The HF runner is unique: it inlines a Python ``-c`` script that
-    calls :func:`huggingface_hub.snapshot_download` with
-    ``allow_patterns=['*.gguf']`` and a fixed ``local_dir='models'``.
-    The script receives the repo id as ``argv[1]``.
-
-    The subprocess inherits ``HF_TOKEN`` via
-    :func:`_service_popen_kwargs` so authenticated downloads work
-    when ``AIMODEL_HF_TOKEN`` is configured.
+    The command payload contains the repository id and selected filename.
+    A subprocess calls :func:`huggingface_hub.hf_hub_download` so the
+    existing terminate/kill cancellation behavior remains intact.
     """
     repo_id = _repo_id_from_hf_command(command)
+    target_file = _target_file_from_hf_command(command)
     if not repo_id:
         state.store.update_job(
             target_id,
             status="failed",
             detail="missing Hugging Face repository id",
+            return_code=1,
+        )
+        return
+    if not target_file:
+        state.store.update_job(
+            target_id,
+            status="failed",
+            detail="missing Hugging Face target file",
             return_code=1,
         )
         return
@@ -127,18 +151,8 @@ def run_hf_download(state, target_id: str, command) -> None:
         detail="Downloading",
         progress="",
     )
-    hf_script = (
-        "from huggingface_hub import snapshot_download; "
-        "import sys; "
-        "snapshot_download("
-        "repo_id=sys.argv[1], "
-        "allow_patterns=['*.gguf'], "
-        "local_dir='models', "
-        "local_dir_use_symlinks=False"
-        ")"
-    )
     process = subprocess.Popen(
-        [sys.executable, "-c", hf_script, repo_id],
+        [sys.executable, "-c", _hf_download_script(), repo_id, target_file],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
