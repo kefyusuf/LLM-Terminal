@@ -32,14 +32,21 @@ from typing import Any
 
 from loguru import logger
 
+import config
 from config import _default_data_dir
 from downloads.runner import process_job
 from downloads.store import DownloadStore
 
 DB_PATH = _default_data_dir() / "downloads.db"
-HOST = "127.0.0.1"
-PORT = 8765
 SERVICE_VERSION = "1.7"
+
+
+def service_bind_address() -> tuple[str, int]:
+    """Return the configured download-service bind address."""
+    return (
+        config.settings.download_service_host,
+        config.settings.download_service_port,
+    )
 
 
 def smoke_mode_enabled() -> bool:
@@ -164,7 +171,7 @@ def main():
     worker.start()
     STATE.worker_thread = worker
 
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    server = ThreadingHTTPServer(service_bind_address(), Handler)
     STATE.server = server
     try:
         server.serve_forever(poll_interval=0.5)
@@ -184,7 +191,8 @@ def run_smoke_check() -> int:
     worker.start()
     STATE.worker_thread = worker
 
-    server = ThreadingHTTPServer((HOST, 0), Handler)
+    host, _ = service_bind_address()
+    server = ThreadingHTTPServer((host, 0), Handler)
     STATE.server = server
     thread = threading.Thread(
         target=server.serve_forever,
@@ -197,7 +205,7 @@ def run_smoke_check() -> int:
 
     try:
         for path, expected_key in (("/health", "ok"), ("/jobs", "jobs")):
-            with urllib.request.urlopen(f"http://{HOST}:{port}{path}", timeout=5) as response:
+            with urllib.request.urlopen(f"http://{host}:{port}{path}", timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if expected_key not in payload:
                 raise SystemExit(f"[smoke] download service check failed for {path}")

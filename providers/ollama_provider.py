@@ -37,11 +37,14 @@ class OllamaProvider:
         self.installed: list[str] = []
 
     def detect(self) -> bool:
+        """Return whether the configured Ollama API is reachable."""
         try:
-            from core.hardware import check_ollama_running
-
-            return check_ollama_running()
-        except Exception:
+            response = get_session().get(
+                f"{config.settings.ollama_api_base}/api/tags",
+                timeout=1,
+            )
+            return response.status_code == 200
+        except RequestException:
             return False
 
     def refresh_installed(self) -> None:
@@ -85,6 +88,7 @@ class OllamaProvider:
             self.refresh_installed()
         return self.search(query, specs, limit=limit, page=page, **kwargs)
 
+
 _ollama_meta_cache_lock = threading.Lock()
 
 
@@ -98,7 +102,7 @@ _init_ollama_cache()
 def get_installed_ollama_models():
     """Return a list of locally installed Ollama model name prefixes (lowercase).
 
-    Queries the Ollama REST API at ``http://localhost:11434``.
+    Queries the configured Ollama REST API.
     Returns an empty list if Ollama is not running or the request fails.
     """
     try:
