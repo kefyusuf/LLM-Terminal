@@ -205,6 +205,7 @@ class TestScoresEndpoint:
 
 class TestProvidersEndpoint:
     def test_providers_returns_list(self, api_server):
+        """The providers endpoint should return a non-empty provider list."""
         _, port = api_server
         data = _get("/api/v1/providers", port)
         assert "providers" in data
