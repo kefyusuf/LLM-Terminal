@@ -16,9 +16,9 @@ from typing import Any
 
 from providers.base import SearchResult
 from providers.capabilities import (
-    ProviderCapabilities,
+    ProviderCapabilities as ProviderCapabilities,
     get_all_provider_capabilities,
-    get_provider_capabilities,
+    get_provider_capabilities as get_provider_capabilities,
 )
 
 
