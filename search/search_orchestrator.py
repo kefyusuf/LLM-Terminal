@@ -38,7 +38,25 @@ from search.search_orchestration import has_more_pages_for_results
 
 @dataclass
 class SearchOutcome:
-    """The full result of a single search invocation."""
+    """The full result of a single search invocation.
+
+    Attributes:
+        results: Concatenated result list (Ollama first, then HF,
+            then the extras — same order as the pre-refactor code).
+        errors: Concatenated error list, capped at the first two
+            by the orchestrator for the status-bar message.
+        has_more_pages: True if pagination should enable the
+            "Next" button. Computed by
+            :func:`search.search_orchestration.has_more_pages_for_results`.
+        result_count: Number of merged results to report in the status
+            message.
+        providers: Echo of the providers list, for downstream
+            status-message builders.
+        cancelled: True if the search was cancelled before all
+            providers returned. The orchestrator still returns a
+            partial :class:`SearchOutcome`; the caller decides
+            whether to apply it.
+    """
 
     results: list[dict] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -49,7 +67,32 @@ class SearchOutcome:
 
 
 class SearchOrchestrator:
-    """Coordinates a single multi-provider search."""
+    """Coordinates a single multi-provider search.
+
+    Constructor takes the things that vary across invocations as
+    callbacks (``on_progress``, ``cancel_check``) and the things
+    that are stable across invocations as plain values
+    (``monitor``, ``hf_provider``, ``ollama_provider``). The
+    orchestrator is stateless across calls; a single instance can
+    service many searches in series.
+
+    Args:
+        monitor: Anything with a ``get_specs() -> dict`` method.
+            Typically a :class:`core.hardware.HardwareMonitor`.
+        hf_provider: A :class:`providers.hf_provider.HuggingFaceProvider`
+            (or anything matching its duck-typed interface).
+        ollama_provider: A :class:`providers.ollama_provider.OllamaProvider`.
+        on_progress: ``Callable[[int, str], None]`` invoked from
+            worker threads to push progress messages back to the
+            UI. The first arg is the search_id; the second is a
+            human-readable message. In a Textual context, callers
+            should wrap this with ``call_from_thread`` if they
+            want to update widgets.
+        cancel_check: ``Callable[[], bool]`` polled before and
+            between provider submissions. Returning True aborts
+            the search and returns a partial :class:`SearchOutcome`
+            with ``cancelled=True``.
+    """
 
     def __init__(
         self,
@@ -80,10 +123,12 @@ class SearchOrchestrator:
         """Run a single search across *providers* and return the outcome.
 
         ``ollama_page_size`` defaults to ``page_size`` when omitted.
+        The orchestrator submits one task per provider to a small
+        thread pool (4 workers, sufficient for the 5-provider fan-out).
         Provider futures are polled at a short interval so external
-        cancellation is observed even while every provider is still running.
-        Once cancellation is observed, the orchestrator returns without
-        waiting for still-running provider workers to finish.
+        cancellation is observed even while every provider is still
+        running; once observed, the orchestrator returns without waiting
+        for still-running provider workers to finish.
         """
         if self.cancel_check():
             return SearchOutcome(providers=list(providers), cancelled=True)
@@ -128,7 +173,9 @@ class SearchOrchestrator:
                 return SearchResult.empty()
             for provider_cls in get_all_provider_classes():
                 if provider_cls.slug == slug:
-                    self.on_progress(search_id, f"Fetching {provider_cls.display_name} data...")
+                    self.on_progress(
+                        search_id, f"Fetching {provider_cls.display_name} data..."
+                    )
                     instance = provider_cls()
                     if instance.detect():
                         return instance.search(query, specs, limit=page_size)
@@ -162,7 +209,6 @@ class SearchOrchestrator:
                     if self.cancel_check():
                         wait_for_workers = False
                         return _cancelled_outcome()
-
                     label = futures[future]
                     try:
                         result: SearchResult = future.result()
@@ -198,11 +244,12 @@ class SearchOrchestrator:
             ollama_result_count=len(ollama_results),
             page_size=page_size,
         )
+        result_count = len(results)
 
         return SearchOutcome(
             results=results,
             errors=errors,
             has_more_pages=has_more_pages,
-            result_count=len(results),
+            result_count=result_count,
             providers=list(providers),
         )
