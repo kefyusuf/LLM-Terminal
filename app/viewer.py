@@ -6,9 +6,9 @@ from collections.abc import Sequence
 
 from textual.containers import Vertical
 from textual.widgets import Input, Select
+from tui_app import AIModelViewer as BaseAIModelViewer
 
 from providers import get_provider_filter_labels
-from tui_app import AIModelViewer as BaseAIModelViewer
 
 
 _PROVIDER_COMPACT_TAGS = {
@@ -89,7 +89,7 @@ class AIModelViewer(BaseAIModelViewer):
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Apply provider changes made directly through the mounted selector."""
-        if event.select.id != "provider-select" or event.value is Select.NULL:
+        if event.select.id != "provider-select":
             return
         self._apply_provider_filter(str(event.value), sync_widget=False)
 
