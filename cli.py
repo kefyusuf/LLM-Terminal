@@ -28,6 +28,19 @@ def get_cli_search_provider_choices() -> tuple[str, ...]:
     return ("all", *supported)
 
 
+def _search_hf_models(query: str, specs: dict, model_info_cache: dict, *, limit: int):
+    """Search Hugging Face from the CLI using the configured authentication token."""
+    from providers.hf_provider import search_hf_models
+
+    return search_hf_models(
+        query,
+        specs,
+        model_info_cache,
+        limit=limit,
+        hf_token=config.settings.hf_token,
+    )
+
+
 def get_version() -> str:
     """Return the installed AI Model Explorer package version."""
     try:
@@ -110,7 +123,6 @@ def system_info():
 )
 def search(query, provider, limit, sort):
     """Search for models matching QUERY."""
-    from providers.hf_provider import search_hf_models
     from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
 
     monitor = HardwareMonitor()
@@ -124,7 +136,7 @@ def search(query, provider, limit, sort):
             results.extend(ollama_results)
 
         if provider in ("all", "huggingface"):
-            hf_results, _ = search_hf_models(query, specs, {}, limit=limit)
+            hf_results, _ = _search_hf_models(query, specs, {}, limit=limit)
             results.extend(hf_results)
 
     if sort == "composite":
@@ -173,7 +185,6 @@ def search(query, provider, limit, sort):
 @click.option("--limit", "-n", default=5, help="Max results")
 def fit(perfect, limit):
     """Find models that fit your hardware."""
-    from providers.hf_provider import search_hf_models
     from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
 
     monitor = HardwareMonitor()
@@ -185,7 +196,7 @@ def fit(perfect, limit):
         ollama_results, _, _ = search_ollama_models("*", specs, local, page_size=50)
         results.extend(ollama_results)
 
-        hf_results, _ = search_hf_models("*", specs, {}, limit=50)
+        hf_results, _ = _search_hf_models("*", specs, {}, limit=50)
         results.extend(hf_results)
 
     results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
@@ -226,7 +237,6 @@ def fit(perfect, limit):
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 def recommend(limit, use_case, output_json):
     """Get model recommendations for your hardware."""
-    from providers.hf_provider import search_hf_models
     from providers.ollama_provider import get_installed_ollama_models, search_ollama_models
 
     monitor = HardwareMonitor()
@@ -238,7 +248,7 @@ def recommend(limit, use_case, output_json):
         ollama_results, _, _ = search_ollama_models("*", specs, local, page_size=50)
         results.extend(ollama_results)
 
-        hf_results, _ = search_hf_models("*", specs, {}, limit=50)
+        hf_results, _ = _search_hf_models("*", specs, {}, limit=50)
         results.extend(hf_results)
 
     results = [r for r in results if r.get("use_case_key") == use_case or use_case == "general"]
