@@ -55,6 +55,8 @@ def installed_cell_markup(
     align_plain: _AlignPlain,
 ) -> str:
     plain = truncate_plain(installed_text, 8)
+    if "n/a" in plain.lower():
+        return f"[#6b789e]{align_plain('-', width, 'left')}[/#6b789e]"
     marker = "●" if ("✔" in plain or "install" in plain.lower()) else "·"
     if marker == "●":
         return f"[bold #4fe08a]{align_plain(marker, width, 'left')}[/bold #4fe08a]"
