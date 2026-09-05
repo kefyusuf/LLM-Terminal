@@ -173,15 +173,31 @@ class TestStartDownload:
         assert ok is True
         assert "queued" in msg.lower()
 
+    @patch("app.download_manager.ensure_service_running", return_value=True)
+    @patch("app.download_manager.create_job")
+    def test_canonical_huggingface_source_is_downloadable(self, mock_create, mock_ensure, manager):
+        mock_create.return_value = {"queued": True}
+        ok, _ = manager.start_download({"source": "Hugging Face", "name": "qwen"})
+        assert ok is True
+
+    @patch("app.download_manager.ensure_service_running")
+    @patch("app.download_manager.create_job")
+    def test_non_downloadable_provider_is_rejected_before_service(self, mock_create, mock_ensure, manager):
+        ok, msg = manager.start_download({"source": "LM Studio", "name": "local-model"})
+        assert ok is False
+        assert "not supported" in msg.lower()
+        mock_ensure.assert_not_called()
+        mock_create.assert_not_called()
+
     @patch("app.download_manager.ensure_service_running", return_value=False)
     def test_service_unavailable(self, mock_ensure, manager):
-        ok, _ = manager.start_download({})
+        ok, _ = manager.start_download({"source": "Ollama", "name": "llama3"})
         assert ok is False
 
     @patch("app.download_manager.ensure_service_running", return_value=True)
     @patch("app.download_manager.create_job", side_effect=Exception("fail"))
     def test_create_fails(self, mock_create, mock_ensure, manager):
-        ok, _ = manager.start_download({})
+        ok, _ = manager.start_download({"source": "Ollama", "name": "llama3"})
         assert ok is False
 
 

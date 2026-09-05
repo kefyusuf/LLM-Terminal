@@ -35,6 +35,27 @@ from downloads.service_client import (
     get_service_health,
     list_jobs,
 )
+from providers.capabilities import get_all_provider_capabilities
+
+
+def _provider_slug_for_source(source: Any) -> str | None:
+    """Resolve model source text to a canonical provider slug."""
+    normalized = str(source or "").strip().lower()
+    if normalized == "hf":
+        return "huggingface"
+
+    for slug, capabilities in get_all_provider_capabilities().items():
+        if normalized in {slug.lower(), capabilities.display_name.lower()}:
+            return slug
+    return None
+
+
+def _source_is_downloadable(source: Any) -> bool:
+    """Return whether canonical provider metadata permits downloads."""
+    slug = _provider_slug_for_source(source)
+    if slug is None:
+        return False
+    return get_all_provider_capabilities()[slug].downloadable
 
 
 class DownloadManager:
@@ -283,6 +304,10 @@ class DownloadManager:
             return False, "Failed to cancel download through service."
 
     def start_download(self, model):
+        source = model.get("source")
+        if not _source_is_downloadable(source):
+            label = str(source or "this provider").strip() or "this provider"
+            return False, f"Downloads are not supported for {label}."
         if not ensure_service_running():
             return False, "Download service is unavailable."
         target_id = download_target_id(model)
@@ -312,17 +337,22 @@ class DownloadManager:
 
         if should_delete_ollama_data(delete_data, source, model_name):
             import subprocess
+
             try:
                 result = subprocess.run(
                     ["ollama", "rm", model_name],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 if result.returncode == 0:
                     messages.append(f"Deleted model data: {model_name}")
                 else:
                     result2 = subprocess.run(
                         ["ollama", "rm", f"{model_name}:latest"],
-                        capture_output=True, text=True, timeout=10,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
                     )
                     if result2.returncode == 0:
                         messages.append(f"Deleted model data: {model_name}:latest")
