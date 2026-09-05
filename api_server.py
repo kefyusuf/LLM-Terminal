@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 from loguru import logger
 
+import config
 from core.hardware import HardwareMonitor
 from core.model_intelligence import plan_hardware_for_model
 from core.scoring import score_model
@@ -41,14 +42,22 @@ VALID_MODEL_PROVIDERS = {"all", "ollama", "huggingface"}
 MAX_MODEL_LIMIT = 100
 PROVIDER_API_BASES = {
     "huggingface": "https://huggingface.co",
-    "ollama": "http://localhost:11434",
     "lmstudio": "http://localhost:1234",
     "docker": "http://localhost:12434",
     "mlx": "local",
 }
 
 
+def get_provider_api_bases() -> dict[str, str]:
+    """Return provider API bases using current runtime configuration where available."""
+    return {
+        **PROVIDER_API_BASES,
+        "ollama": config.settings.ollama_api_base,
+    }
+
+
 def smoke_mode_enabled() -> bool:
+    """Return whether API smoke mode is enabled for the current process."""
     return os.getenv("AIMODEL_SMOKE") == "1"
 
 
@@ -291,6 +300,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
     def _handle_providers(self):
         """Return provider availability plus canonical capability metadata."""
         availability = detect_available_providers()
+        api_bases = get_provider_api_bases()
         providers = []
 
         for slug, capabilities in get_all_provider_capabilities().items():
@@ -299,7 +309,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
                     "name": slug,
                     "display_name": capabilities.display_name,
                     "available": availability.get(slug, False),
-                    "api_base": PROVIDER_API_BASES.get(slug, ""),
+                    "api_base": api_bases.get(slug, ""),
                     "capabilities": {
                         "searchable": capabilities.searchable,
                         "detectable": capabilities.detectable,
