@@ -6,9 +6,9 @@ from collections.abc import Sequence
 
 from textual.containers import Vertical
 from textual.widgets import Input, Select
-from tui_app import AIModelViewer as BaseAIModelViewer
 
 from providers import get_provider_filter_labels
+from tui_app import AIModelViewer as BaseAIModelViewer
 
 
 _PROVIDER_COMPACT_TAGS = {
