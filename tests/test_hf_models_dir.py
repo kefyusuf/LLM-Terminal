@@ -1,7 +1,5 @@
 """Regression coverage for the Hugging Face model download directory."""
 
-from pathlib import Path
-
 from config import Settings, _default_data_dir
 from downloads.runner import _hf_download_script
 
