@@ -15,6 +15,7 @@ from core.utils import (
     parse_retry_after_seconds,
 )
 from providers.base import SearchResult
+from providers.capabilities import get_provider_capabilities
 
 
 class HuggingFaceProvider:
@@ -229,6 +230,8 @@ def search_hf_models(
     has_more_pages = len(raw_window) > limit
     page_models = raw_window[:limit]
 
+    hf_lists_installed = get_provider_capabilities(HuggingFaceProvider.slug).lists_installed
+
     for model in page_models:
         try:
             repo_id = _repo_id_from_model(model)
@@ -265,7 +268,9 @@ def search_hf_models(
 
             fit_str, mode_str, _ = calculate_fit(size, specs)
             result_dict = {
-                "inst": "[grey37]-[/grey37]",
+                "inst": "[grey37]-[/grey37]"
+                if hf_lists_installed
+                else "[grey37]N/A[/grey37]",
                 "source": "Hugging Face",
                 "provider": provider,
                 "publisher": publisher,
