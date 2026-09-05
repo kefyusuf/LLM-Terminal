@@ -21,11 +21,12 @@ _PROVIDER_COMPACT_TAGS = {
 
 
 def cycle_provider_label(labels: Sequence[str], current: str) -> str:
-    """Return the next provider label in a non-empty cyclic selector."""
+    """Return the next provider label, recovering unknown state to the first option."""
     if not labels:
         return current
-    active = current if current in labels else labels[0]
-    return labels[(labels.index(active) + 1) % len(labels)]
+    if current not in labels:
+        return labels[0]
+    return labels[(labels.index(current) + 1) % len(labels)]
 
 
 def provider_compact_tag(label: str) -> str:
