@@ -1,9 +1,5 @@
 """Regression coverage for non-paginated provider search flags."""
 
-from providers.docker_provider import DockerProvider
-from providers.mlx_provider import MLXProvider
-from providers.ollama_provider import search_ollama_models
-
 
 SPECS = {
     "has_gpu": False,
@@ -15,6 +11,7 @@ SPECS = {
 
 def test_ollama_search_never_advertises_page_navigation(monkeypatch):
     """Ollama ignores page offsets, so it must not advertise a next page."""
+    from providers.ollama_provider import search_ollama_models
 
     class Response:
         status_code = 200
@@ -47,6 +44,7 @@ def test_ollama_search_never_advertises_page_navigation(monkeypatch):
 
 def test_docker_search_never_advertises_page_navigation(monkeypatch):
     """Docker Model Runner search has no page-offset contract."""
+    from providers.docker_provider import DockerProvider
 
     class Response:
         status_code = 200
@@ -68,6 +66,8 @@ def test_docker_search_never_advertises_page_navigation(monkeypatch):
 
 def test_mlx_search_never_advertises_page_navigation(monkeypatch, tmp_path):
     """MLX local-cache search has no page-offset contract."""
+    from providers.mlx_provider import MLXProvider
+
     for index in range(3):
         (tmp_path / f"models--mlx-community--model-{index}").mkdir()
 
