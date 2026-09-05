@@ -15,7 +15,11 @@ from loguru import logger
 from typing import Any
 
 from providers.base import SearchResult
-from providers.capabilities import get_all_provider_capabilities
+from providers.capabilities import (
+    ProviderCapabilities,
+    get_all_provider_capabilities,
+    get_provider_capabilities,
+)
 
 
 class BaseProvider(ABC):
