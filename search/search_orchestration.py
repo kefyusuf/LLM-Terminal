@@ -21,9 +21,19 @@ def providers_from_filter(current_filter: str) -> list[str]:
     return _FILTER_TO_SLUGS.get(current_filter, ["ollama"])
 
 
+def selection_supports_pagination(providers: Sequence[str]) -> bool:
+    """Return whether a single-provider selection supports page navigation."""
+    if len(providers) != 1:
+        return False
+    try:
+        return get_provider_capabilities(providers[0]).paginated
+    except KeyError:
+        return False
+
+
 def is_hf_provider_selection(providers: Sequence[str]) -> bool:
-    """Return ``True`` when selection targets Hugging Face only."""
-    return list(providers) == ["huggingface"]
+    """Return ``True`` when selection targets the currently paginated HF provider."""
+    return selection_supports_pagination(providers) and list(providers) == ["huggingface"]
 
 
 def is_multi_provider(providers: Sequence[str]) -> bool:
@@ -76,7 +86,7 @@ def has_more_pages_for_results(
     page_size: int,
 ) -> bool:
     """Compute whether next-page navigation should be enabled."""
-    if "huggingface" in providers and hf_result_count > 0:
+    if is_hf_provider_selection(providers) and hf_result_count > 0:
         return hf_result_count == page_size
     if "ollama" in providers and ollama_result_count > 0:
         return False

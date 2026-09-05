@@ -7,6 +7,7 @@ from search.search_orchestration import (
     provider_result_count,
     provider_search_status,
     providers_from_filter,
+    selection_supports_pagination,
     validate_page_request,
 )
 
@@ -57,6 +58,19 @@ def test_provider_search_status_text_for_ollama():
 
 def test_page_info_suffix_for_second_page():
     assert page_info_suffix(1) == " (Page 2)"
+
+
+def test_selection_supports_pagination_uses_capability_registry():
+    assert selection_supports_pagination(["huggingface"]) is True
+    assert selection_supports_pagination(["ollama"]) is False
+    assert selection_supports_pagination(["lmstudio"]) is False
+    assert selection_supports_pagination(["docker"]) is False
+    assert selection_supports_pagination(["mlx"]) is False
+
+
+def test_selection_supports_pagination_rejects_multi_and_unknown():
+    assert selection_supports_pagination(["huggingface", "ollama"]) is False
+    assert selection_supports_pagination(["unknown"]) is False
 
 
 def test_is_hf_provider_selection():
