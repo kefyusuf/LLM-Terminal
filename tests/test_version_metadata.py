@@ -2,12 +2,14 @@
 
 
 def _root():
+    """Return the repository root for metadata fixtures used by this test module."""
     from pathlib import Path
 
     return Path(__file__).resolve().parents[1]
 
 
 def _project_version() -> str:
+    """Read the declared project version from pyproject.toml."""
     for line in (_root() / "pyproject.toml").read_text(encoding="utf-8").splitlines():
         if line.startswith('version = "'):
             return line.split('"', 2)[1]
@@ -15,6 +17,7 @@ def _project_version() -> str:
 
 
 def _latest_changelog_version() -> str:
+    """Read the latest release version heading from CHANGELOG.md."""
     for line in (_root() / "CHANGELOG.md").read_text(encoding="utf-8").splitlines():
         if line.startswith("## "):
             return line.removeprefix("## ").split(" - ", 1)[0].strip()
