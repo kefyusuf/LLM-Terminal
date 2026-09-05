@@ -125,10 +125,9 @@ class SearchOrchestrator:
         ``ollama_page_size`` defaults to ``page_size`` when omitted.
         The orchestrator submits one task per provider to a small
         thread pool (4 workers, sufficient for the 5-provider fan-out).
-        Cancellation is polled both at submission time and between
-        ``as_completed`` yields, so a search that takes 30 seconds
-        is cancelled within 0.25 seconds of ``cancel_check()``
-        returning True.
+        Cancellation is checked before provider work and whenever a
+        provider completes; once observed, the orchestrator returns
+        without waiting for still-running provider workers to finish.
         """
         if self.cancel_check():
             return SearchOutcome(providers=list(providers), cancelled=True)
@@ -173,7 +172,9 @@ class SearchOrchestrator:
             return SearchResult.empty()
 
         futures: dict = {}
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        pool = ThreadPoolExecutor(max_workers=4)
+        wait_for_workers = True
+        try:
             if "ollama" in providers:
                 futures[pool.submit(_search_ollama)] = "ollama"
             if "huggingface" in providers:
@@ -186,6 +187,7 @@ class SearchOrchestrator:
             for future in as_completed(futures):
                 if self.cancel_check():
                     partial_results = ollama_results + hf_results + extra_results
+                    wait_for_workers = False
                     return SearchOutcome(
                         results=partial_results,
                         errors=ollama_errors + hf_errors + extra_errors,
@@ -214,6 +216,8 @@ class SearchOrchestrator:
                 else:
                     extra_results.extend(result.results)
                     extra_errors.extend(result.errors)
+        finally:
+            pool.shutdown(wait=wait_for_workers, cancel_futures=not wait_for_workers)
 
         if self.cancel_check():
             partial_results = ollama_results + hf_results + extra_results
