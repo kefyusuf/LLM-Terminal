@@ -25,10 +25,9 @@ class BaseProvider(ABC):
     for a specific LLM runtime (Ollama, Hugging Face, LM Studio, etc.).
     """
 
-    # Class-level metadata (override in subclasses)
-    slug: str = ""  # Internal identifier (e.g., "ollama", "huggingface")
-    display_name: str = ""  # Human-readable name (e.g., "Ollama")
-    default_host: str = ""  # Default API host
+    slug: str = ""
+    display_name: str = ""
+    default_host: str = ""
 
     @abstractmethod
     def detect(self) -> bool:
@@ -42,15 +41,7 @@ class BaseProvider(ABC):
         limit: int = 15,
         **kwargs: Any,
     ) -> SearchResult:
-        """Search for models matching *query*.
-
-        Returns:
-            A ``SearchResult`` carrying results, errors, and a
-            ``has_more_pages`` flag. Providers must NOT raise for
-            transient errors (rate limits, network failures, parse
-            errors) — they return diagnostics in ``SearchResult.errors``
-            and the orchestrator decides what to surface to the user.
-        """
+        """Search for models matching *query*."""
 
     @abstractmethod
     def list_installed(self) -> list[str]:
@@ -63,21 +54,10 @@ class BaseProvider(ABC):
         limit: int = 15,
         **kwargs: Any,
     ) -> SearchResult:
-        """Search and mark installed models. Override for custom behavior.
-
-        The base implementation calls ``search()`` and ignores installed
-        state. Subclasses (e.g. Ollama) override to inject installed-
-        model markers into the result dicts.
-        """
+        """Search and mark installed models. Override for custom behavior."""
         return self.search(query, specs, limit=limit, **kwargs)
 
 
-# ---------------------------------------------------------------------------
-# Provider Registry
-# ---------------------------------------------------------------------------
-
-
-# Lazy imports to avoid circular dependencies
 def _get_ollama_provider():
     from providers.ollama_provider import OllamaProvider
 
@@ -109,14 +89,7 @@ def _get_mlx_provider():
 
 
 def get_all_provider_classes() -> list[type]:
-    """Return all available provider classes (may fail on non-matching platforms).
-
-    Note: returns a mix of :class:`BaseProvider` subclasses and
-    duck-typed providers (HuggingFaceProvider, OllamaProvider) that
-    expose the same interface (``slug``, ``display_name``,
-    ``detect()``, ``search()``, ``list_installed()``,
-    ``search_with_installed()``).
-    """
+    """Return all available provider classes (may fail on non-matching platforms)."""
     providers = []
     for getter in [
         _get_hf_provider,
@@ -131,15 +104,12 @@ def get_all_provider_classes() -> list[type]:
 
 
 def detect_available_providers() -> dict[str, bool]:
-    """Detect which providers are available on this system.
-
-    Returns a dict mapping provider slug to availability bool.
-    """
+    """Detect which providers are available on this system."""
     from core.hardware import check_ollama_running
 
     available = {
         "ollama": check_ollama_running(),
-        "huggingface": True,  # Always available via API
+        "huggingface": True,
     }
 
     for provider_cls in get_all_provider_classes():
@@ -148,7 +118,6 @@ def detect_available_providers() -> dict[str, bool]:
             available[instance.slug] = instance.detect()
         except Exception:
             logger.debug("Provider {} detection failed, skipping", provider_cls.__name__)
-            pass
 
     return available
 
@@ -162,13 +131,20 @@ def get_provider_display_names() -> dict[str, str]:
 
 
 def get_provider_filter_labels() -> list[str]:
-    """Return available provider labels for the TUI selector in stable order."""
+    """Return TUI provider labels while preserving the existing selector behavior."""
     capabilities = get_all_provider_capabilities()
     availability = detect_available_providers()
-    order = ("ollama", "huggingface", "lmstudio", "docker", "mlx")
+    always_visible = ("ollama", "huggingface")
+    optional = ("lmstudio", "docker", "mlx")
 
-    return [
+    labels = [
         capabilities[slug].display_name
-        for slug in order
-        if slug in capabilities and availability.get(slug, False)
+        for slug in always_visible
+        if slug in capabilities
     ]
+    labels.extend(
+        capabilities[slug].display_name
+        for slug in optional
+        if slug in capabilities and availability.get(slug, False)
+    )
+    return labels
