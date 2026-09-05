@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from platformdirs import user_data_path
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_NAME = "ai-model-explorer"
@@ -63,7 +63,10 @@ class Settings(BaseSettings):
     # HuggingFace settings
     hf_search_limit: int = 15
     hf_search_max_pages: int = 10
-    hf_token: str | None = None
+    hf_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AIMODEL_HF_TOKEN", "HF_TOKEN"),
+    )
 
     # Ollama settings
     ollama_search_limit: int = 20
