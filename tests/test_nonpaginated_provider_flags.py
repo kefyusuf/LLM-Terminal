@@ -1,7 +1,8 @@
 """Regression coverage for non-paginated provider search flags."""
 
-from pathlib import Path
 from unittest.mock import patch
+
+from pathlib import Path
 
 from providers.docker_provider import DockerProvider
 from providers.mlx_provider import MLXProvider
@@ -24,7 +25,9 @@ def test_ollama_search_never_advertises_page_navigation(monkeypatch):
         text = "".join(
             f'<a href="/library/model-{index}">model-{index}</a>' for index in range(3)
         )
-        headers = {}
+
+        def __init__(self):
+            self.headers = {}
 
     class Session:
         def get(self, *args, **kwargs):
