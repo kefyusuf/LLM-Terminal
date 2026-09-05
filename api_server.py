@@ -139,6 +139,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_models(self, params):
+        """Handle model search requests across supported REST providers."""
         query = params.get("search", [""])[0]
         provider = params.get("provider", ["all"])[0].lower()
         if provider not in VALID_MODEL_PROVIDERS:
@@ -176,7 +177,13 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
             results.extend(ollama_results)
 
         if provider in ("all", "huggingface"):
-            hf_results, _ = search_hf_models(query or "*", specs, {}, limit=limit)
+            hf_results, _ = search_hf_models(
+                query or "*",
+                specs,
+                {},
+                limit=limit,
+                hf_token=config.settings.hf_token,
+            )
             results.extend(hf_results)
 
         # Filter
