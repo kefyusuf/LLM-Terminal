@@ -3,15 +3,19 @@
 import asyncio
 import os
 
-from tui_app import AIModelViewer
+from app.viewer import AIModelViewer
 
 
 def smoke_mode_enabled() -> bool:
+    """Return whether process smoke mode is enabled."""
     return os.getenv("AIMODEL_SMOKE") == "1"
 
 
 def run_smoke_check() -> int:
+    """Boot the runtime viewer in Textual test mode and return its exit code."""
+
     async def _run() -> int:
+        """Run the async Textual smoke session."""
         app = AIModelViewer()
         async with app.run_test() as pilot:
             await pilot.pause(1.5)
