@@ -1,20 +1,21 @@
 """Regression coverage for package, CLI, and changelog version alignment."""
 
-from pathlib import Path
 
+def _root():
+    from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[1]
 
 
 def _project_version() -> str:
-    for line in (_ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
+    for line in (_root() / "pyproject.toml").read_text(encoding="utf-8").splitlines():
         if line.startswith('version = "'):
             return line.split('"', 2)[1]
     raise AssertionError("project version not found")
 
 
 def _latest_changelog_version() -> str:
-    for line in (_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines():
+    for line in (_root() / "CHANGELOG.md").read_text(encoding="utf-8").splitlines():
         if line.startswith("## "):
             return line.removeprefix("## ").split(" - ", 1)[0].strip()
     raise AssertionError("changelog version not found")
