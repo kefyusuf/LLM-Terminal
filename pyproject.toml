@@ -62,7 +62,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "core", "downloads", "providers",
-                     "results", "scripts", "search"]
+                     "results", "scripts", "search", "tui_app"]
 
 [tool.ruff.lint.per-file-ignores]
 "tui_app.py" = ["I001", "RUF012", "SIM105", "SIM117", "RUF010"]
