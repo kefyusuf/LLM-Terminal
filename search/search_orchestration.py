@@ -8,9 +8,10 @@ from providers.capabilities import get_all_provider_capabilities, get_provider_c
 
 
 _PROVIDER_CAPABILITIES = get_all_provider_capabilities()
-ALL_PROVIDER_SLUGS = list(_PROVIDER_CAPABILITIES)
+_TUI_PROVIDER_ORDER = ("ollama", "huggingface", "lmstudio", "docker", "mlx")
+ALL_PROVIDER_SLUGS = [slug for slug in _TUI_PROVIDER_ORDER if slug in _PROVIDER_CAPABILITIES]
 _FILTER_TO_SLUGS: dict[str, list[str]] = {
-    metadata.display_name: [slug] for slug, metadata in _PROVIDER_CAPABILITIES.items()
+    _PROVIDER_CAPABILITIES[slug].display_name: [slug] for slug in ALL_PROVIDER_SLUGS
 }
 _FILTER_TO_SLUGS["All"] = ALL_PROVIDER_SLUGS
 
