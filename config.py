@@ -41,6 +41,11 @@ def _default_download_db_path() -> Path:
     return _default_data_file("downloads.db")
 
 
+def _default_hf_models_dir() -> Path:
+    """Return the persistent per-user directory used for Hugging Face model files."""
+    return _default_data_dir() / "models"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AIMODEL_",
@@ -67,6 +72,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("AIMODEL_HF_TOKEN", "HF_TOKEN"),
     )
+    hf_models_dir: Path = Field(default_factory=_default_hf_models_dir)
 
     # Ollama settings
     ollama_search_limit: int = 20

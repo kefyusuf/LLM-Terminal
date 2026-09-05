@@ -78,7 +78,7 @@ def _hf_download_script() -> str:
         "hf_hub_download("
         "repo_id=sys.argv[1], "
         "filename=sys.argv[2], "
-        "local_dir='models'"
+        "local_dir=sys.argv[3]"
         ")"
     )
 
@@ -126,6 +126,8 @@ def run_hf_download(state, target_id: str, command) -> None:
     A subprocess calls :func:`huggingface_hub.hf_hub_download` so the
     existing terminate/kill cancellation behavior remains intact.
     """
+    import config
+
     repo_id = _repo_id_from_hf_command(command)
     target_file = _target_file_from_hf_command(command)
     if not repo_id:
@@ -145,6 +147,9 @@ def run_hf_download(state, target_id: str, command) -> None:
         )
         return
 
+    models_dir = config.settings.hf_models_dir
+    models_dir.mkdir(parents=True, exist_ok=True)
+
     state.store.update_job(
         target_id,
         status="running",
@@ -152,7 +157,7 @@ def run_hf_download(state, target_id: str, command) -> None:
         progress="",
     )
     process = subprocess.Popen(
-        [sys.executable, "-c", _hf_download_script(), repo_id, target_file],
+        [sys.executable, "-c", _hf_download_script(), repo_id, target_file, str(models_dir)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
