@@ -8,7 +8,12 @@ from providers.mlx_provider import MLXProvider
 from providers.ollama_provider import search_ollama_models
 
 
-SPECS = {"has_gpu": False, "ram_total": 16.0}
+SPECS = {
+    "has_gpu": False,
+    "ram_total": 16.0,
+    "ram_free": 16.0,
+    "vram_free": 0.0,
+}
 
 
 def test_ollama_search_never_advertises_page_navigation(monkeypatch):
