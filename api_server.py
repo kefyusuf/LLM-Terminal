@@ -57,6 +57,7 @@ def get_provider_api_bases() -> dict[str, str]:
 
 
 def smoke_mode_enabled() -> bool:
+    """Return whether API smoke mode is enabled for the current process."""
     return os.getenv("AIMODEL_SMOKE") == "1"
 
 
