@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from api_server import DEFAULT_HOST, create_server
+from providers.capabilities import get_all_provider_capabilities
 
 
 @pytest.fixture(scope="module")
@@ -70,6 +71,16 @@ def api_server():
         patch("api_server.search_ollama_models", side_effect=fake_search_ollama_models),
         patch("api_server.search_hf_models", side_effect=fake_search_hf_models),
         patch("api_server.get_installed_ollama_models", return_value=[]),
+        patch(
+            "api_server.detect_available_providers",
+            return_value={
+                "huggingface": True,
+                "ollama": False,
+                "lmstudio": True,
+                "docker": False,
+                "mlx": False,
+            },
+        ),
     ]
     for p in patchers:
         p.start()
@@ -198,3 +209,26 @@ class TestProvidersEndpoint:
         data = _get("/api/v1/providers", port)
         assert "providers" in data
         assert len(data["providers"]) >= 1
+
+    def test_providers_cover_canonical_registry(self, api_server):
+        """The API should expose every provider in the canonical capability registry."""
+        _, port = api_server
+        data = _get("/api/v1/providers", port)
+        names = {provider["name"] for provider in data["providers"]}
+        assert names == set(get_all_provider_capabilities())
+
+    def test_providers_expose_canonical_capabilities(self, api_server):
+        """Each API provider entry should mirror its canonical capability flags."""
+        _, port = api_server
+        data = _get("/api/v1/providers", port)
+        by_name = {provider["name"]: provider for provider in data["providers"]}
+
+        for slug, capabilities in get_all_provider_capabilities().items():
+            assert by_name[slug]["display_name"] == capabilities.display_name
+            assert by_name[slug]["capabilities"] == {
+                "searchable": capabilities.searchable,
+                "detectable": capabilities.detectable,
+                "lists_installed": capabilities.lists_installed,
+                "downloadable": capabilities.downloadable,
+                "paginated": capabilities.paginated,
+            }
