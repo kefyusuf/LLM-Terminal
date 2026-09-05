@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 from loguru import logger
 
+import config
 from core.hardware import HardwareMonitor
 from core.model_intelligence import plan_hardware_for_model
 from core.scoring import score_model
@@ -41,11 +42,18 @@ VALID_MODEL_PROVIDERS = {"all", "ollama", "huggingface"}
 MAX_MODEL_LIMIT = 100
 PROVIDER_API_BASES = {
     "huggingface": "https://huggingface.co",
-    "ollama": "http://localhost:11434",
     "lmstudio": "http://localhost:1234",
     "docker": "http://localhost:12434",
     "mlx": "local",
 }
+
+
+def get_provider_api_bases() -> dict[str, str]:
+    """Return provider API bases using current runtime configuration where available."""
+    return {
+        **PROVIDER_API_BASES,
+        "ollama": config.settings.ollama_api_base,
+    }
 
 
 def smoke_mode_enabled() -> bool:
@@ -55,7 +63,6 @@ def smoke_mode_enabled() -> bool:
 class ModelAPIHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the model API."""
 
-    # Shared state (set by server startup)
     monitor: HardwareMonitor = None  # type: ignore[assignment]
 
     def log_message(self, format, *args):
@@ -160,7 +167,6 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         specs = self.monitor.get_specs()
         results = []
 
-        # Search providers
         if provider in ("all", "ollama"):
             local = get_installed_ollama_models()
             ollama_results, _, _ = search_ollama_models(query or "*", specs, local, page_size=limit)
@@ -170,13 +176,11 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
             hf_results, _ = search_hf_models(query or "*", specs, {}, limit=limit)
             results.extend(hf_results)
 
-        # Filter
         if use_case != "all":
             results = [r for r in results if r.get("use_case_key") == use_case]
         if min_fit != "all":
             results = [r for r in results if min_fit in r.get("fit", "").lower()]
 
-        # Sort
         if sort_by == "composite":
             results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
         elif sort_by == "speed":
@@ -186,7 +190,6 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         elif sort_by == "name":
             results.sort(key=lambda r: r.get("name", "").lower())
 
-        # Serialize
         models = []
         for r in results[:limit]:
             models.append(
@@ -231,7 +234,6 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         except (ValueError, IndexError):
             return self._error("Invalid 'limit' parameter; expected integer.", 400)
 
-        # Forward to models endpoint with composite sort
         params["sort"] = ["composite"]
         params["limit"] = [str(limit)]
         self._handle_models(params)
@@ -291,6 +293,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
     def _handle_providers(self):
         """Return provider availability plus canonical capability metadata."""
         availability = detect_available_providers()
+        api_bases = get_provider_api_bases()
         providers = []
 
         for slug, capabilities in get_all_provider_capabilities().items():
@@ -299,7 +302,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
                     "name": slug,
                     "display_name": capabilities.display_name,
                     "available": availability.get(slug, False),
-                    "api_base": PROVIDER_API_BASES.get(slug, ""),
+                    "api_base": api_bases.get(slug, ""),
                     "capabilities": {
                         "searchable": capabilities.searchable,
                         "detectable": capabilities.detectable,
