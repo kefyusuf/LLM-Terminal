@@ -26,6 +26,5 @@ def _latest_changelog_version() -> str:
 def test_package_cli_and_changelog_versions_match():
     """Published package metadata, CLI output, and latest release notes must stay aligned."""
     project_version = _project_version()
-    assert project_version == "1.0.1"
     assert get_version() == project_version
     assert _latest_changelog_version() == project_version
