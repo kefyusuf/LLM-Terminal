@@ -1,7 +1,7 @@
 """Regression coverage for package, CLI, and changelog version alignment."""
 
-import re
 from pathlib import Path
+import re
 
 from cli import get_version
 
