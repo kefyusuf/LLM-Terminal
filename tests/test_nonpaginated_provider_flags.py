@@ -1,7 +1,5 @@
 """Regression coverage for non-paginated provider search flags."""
 
-from unittest.mock import patch
-
 from pathlib import Path
 
 from providers.docker_provider import DockerProvider
@@ -49,16 +47,22 @@ def test_ollama_search_never_advertises_page_navigation(monkeypatch):
     assert has_more is False
 
 
-def test_docker_search_never_advertises_page_navigation():
+def test_docker_search_never_advertises_page_navigation(monkeypatch):
     """Docker Model Runner search has no page-offset contract."""
-    provider = DockerProvider()
 
-    with patch("providers.docker_provider.get_session") as mock_session:
-        response = mock_session.return_value.get.return_value
-        response.status_code = 200
-        response.json.return_value = ["org/model-a", "org/model-b", "org/model-c"]
+    class Response:
+        status_code = 200
 
-        result = provider.search("model", SPECS, limit=2)
+        def json(self):
+            return ["org/model-a", "org/model-b", "org/model-c"]
+
+    class Session:
+        def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr("providers.docker_provider.get_session", lambda: Session())
+
+    result = DockerProvider().search("model", SPECS, limit=2)
 
     assert len(result.results) == 2
     assert result.has_more_pages is False
