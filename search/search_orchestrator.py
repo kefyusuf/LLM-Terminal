@@ -29,7 +29,7 @@ shape.
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 
 from providers import SearchResult, get_all_provider_classes
@@ -125,9 +125,10 @@ class SearchOrchestrator:
         ``ollama_page_size`` defaults to ``page_size`` when omitted.
         The orchestrator submits one task per provider to a small
         thread pool (4 workers, sufficient for the 5-provider fan-out).
-        Cancellation is checked before provider work and whenever a
-        provider completes; once observed, the orchestrator returns
-        without waiting for still-running provider workers to finish.
+        Provider futures are polled at a short interval so external
+        cancellation is observed even while every provider is still
+        running; once observed, the orchestrator returns without waiting
+        for still-running provider workers to finish.
         """
         if self.cancel_check():
             return SearchOutcome(providers=list(providers), cancelled=True)
@@ -140,6 +141,16 @@ class SearchOrchestrator:
         hf_errors: list[str] = []
         extra_results: list[dict] = []
         extra_errors: list[str] = []
+
+        def _cancelled_outcome() -> SearchOutcome:
+            partial_results = ollama_results + hf_results + extra_results
+            return SearchOutcome(
+                results=partial_results,
+                errors=ollama_errors + hf_errors + extra_errors,
+                result_count=len(partial_results),
+                providers=list(providers),
+                cancelled=True,
+            )
 
         def _search_ollama():
             if self.cancel_check():
@@ -184,50 +195,43 @@ class SearchOrchestrator:
                 if slug in providers and slug not in ("ollama", "huggingface"):
                     futures[pool.submit(_search_extra, slug)] = slug
 
-            for future in as_completed(futures):
+            pending = set(futures)
+            while pending:
                 if self.cancel_check():
-                    partial_results = ollama_results + hf_results + extra_results
                     wait_for_workers = False
-                    return SearchOutcome(
-                        results=partial_results,
-                        errors=ollama_errors + hf_errors + extra_errors,
-                        result_count=len(partial_results),
-                        providers=list(providers),
-                        cancelled=True,
-                    )
-                label = futures[future]
-                try:
-                    result: SearchResult = future.result()
-                except Exception:
-                    if label == "ollama":
-                        ollama_errors.append("Ollama search failed")
-                    elif label == "huggingface":
-                        hf_errors.append("HuggingFace search failed")
-                    else:
-                        extra_errors.append(f"{label} search failed")
+                    return _cancelled_outcome()
+
+                done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                if not done:
                     continue
 
-                if label == "ollama":
-                    ollama_results = result.results
-                    ollama_errors = result.errors
-                elif label == "huggingface":
-                    hf_results = result.results
-                    hf_errors = result.errors
-                else:
-                    extra_results.extend(result.results)
-                    extra_errors.extend(result.errors)
+                for future in done:
+                    label = futures[future]
+                    try:
+                        result: SearchResult = future.result()
+                    except Exception:
+                        if label == "ollama":
+                            ollama_errors.append("Ollama search failed")
+                        elif label == "huggingface":
+                            hf_errors.append("HuggingFace search failed")
+                        else:
+                            extra_errors.append(f"{label} search failed")
+                        continue
+
+                    if label == "ollama":
+                        ollama_results = result.results
+                        ollama_errors = result.errors
+                    elif label == "huggingface":
+                        hf_results = result.results
+                        hf_errors = result.errors
+                    else:
+                        extra_results.extend(result.results)
+                        extra_errors.extend(result.errors)
         finally:
             pool.shutdown(wait=wait_for_workers, cancel_futures=not wait_for_workers)
 
         if self.cancel_check():
-            partial_results = ollama_results + hf_results + extra_results
-            return SearchOutcome(
-                results=partial_results,
-                errors=ollama_errors + hf_errors + extra_errors,
-                result_count=len(partial_results),
-                providers=list(providers),
-                cancelled=True,
-            )
+            return _cancelled_outcome()
 
         results = ollama_results + hf_results + extra_results
         errors = ollama_errors + hf_errors + extra_errors
