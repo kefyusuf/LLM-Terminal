@@ -126,7 +126,8 @@ python -m api_server --port 9000  # Custom port
 
 | Variable | Default | Description |
 |---|---|---|
-| `HF_TOKEN` | - | Hugging Face read-only token for higher rate limits |
+| `AIMODEL_HF_TOKEN` | - | Canonical Hugging Face read-only token setting; standard `HF_TOKEN` is accepted as a fallback |
+| `AIMODEL_HF_MODELS_DIR` | OS-specific user-data `models/` directory | Hugging Face GGUF download directory |
 | `AIMODEL_DOWNLOAD_MAX_WORKERS` | 2 | Parallel download worker count |
 | `AIMODEL_HF_SEARCH_LIMIT` | 15 | HF results per page |
 | `AIMODEL_HF_SEARCH_MAX_PAGES` | 10 | Max HF pages |
@@ -139,7 +140,9 @@ python -m api_server --port 9000  # Custom port
 ### Example `.env`
 
 ```env
-HF_TOKEN=hf_your_token_here
+AIMODEL_HF_TOKEN=hf_your_token_here
+# HF_TOKEN=hf_your_token_here  # Supported fallback for Hugging Face tooling compatibility
+# AIMODEL_HF_MODELS_DIR=/custom/path/models
 AIMODEL_UI_MODE=compact
 AIMODEL_THEME=nord
 ```
@@ -212,7 +215,7 @@ Where efficiency depends on inference mode: GPU (0.55), GPU+CPU offload (0.30), 
 ## Notes
 
 - `terminal_ui/` now exists mainly for theme/style assets; the legacy experimental UI remains isolated there.
-- Download service data is stored in `data/downloads.db`.
-- Metadata cache is stored in `data/cache.db`.
+- Download service data and metadata cache are stored in the OS-specific per-user application data directory by default; `AIMODEL_DOWNLOAD_DB_PATH` and `AIMODEL_CACHE_DB_PATH` can override those paths.
+- Hugging Face GGUF files are stored in the same per-user application data directory under `models/` by default; `AIMODEL_HF_MODELS_DIR` can override the destination.
 - REST API binds to `127.0.0.1:8787` by default (localhost only).
 - Provider auto-detection runs at startup; unavailable providers are silently skipped.
