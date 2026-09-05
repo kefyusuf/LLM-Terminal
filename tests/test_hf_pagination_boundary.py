@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from providers.capabilities import get_provider_capabilities
 from providers.hf_provider import HuggingFaceProvider
 
 
@@ -70,3 +71,22 @@ def test_parse_failure_does_not_pull_lookahead_into_current_page():
         "test/model-4",
     ]
     assert result.has_more_pages is True
+
+
+def test_hf_results_mark_installed_state_unavailable_from_capabilities():
+    """HF must not present an uninstalled marker when installed listing is unsupported."""
+
+    class FakeModel:
+        modelId = "test/model"
+        likes = 0
+        downloads = 0
+        siblings = []
+
+    assert get_provider_capabilities("huggingface").lists_installed is False
+
+    provider = HuggingFaceProvider(model_info_cache={})
+    with patch("providers.hf_provider.HfApi.list_models", return_value=[FakeModel()]):
+        result = provider.search("test", _specs(), limit=5, page=0)
+
+    assert len(result.results) == 1
+    assert "N/A" in result.results[0]["inst"]
