@@ -206,9 +206,6 @@ class SearchOrchestrator:
                     continue
 
                 for future in done:
-                    if self.cancel_check():
-                        wait_for_workers = False
-                        return _cancelled_outcome()
                     label = futures[future]
                     try:
                         result: SearchResult = future.result()
