@@ -400,7 +400,7 @@ def cache_stats():
     cursor.execute("SELECT source, COUNT(*) FROM model_cache GROUP BY source")
     counts = cursor.fetchall()
 
-    console.print("[bold]Cache Statistics:[/bold]")
+    console.print("\n[bold]Cache Statistics:[/bold]")
     for source, count in counts:
         console.print(f"  {source}: {count} entries")
 
