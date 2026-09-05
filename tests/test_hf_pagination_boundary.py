@@ -80,7 +80,9 @@ def test_hf_results_mark_installed_state_unavailable_from_capabilities():
         modelId = "test/model"
         likes = 0
         downloads = 0
-        siblings = []
+
+        def __init__(self):
+            self.siblings = []
 
     assert get_provider_capabilities("huggingface").lists_installed is False
 
