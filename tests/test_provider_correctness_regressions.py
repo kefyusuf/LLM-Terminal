@@ -11,24 +11,16 @@ from search.search_orchestrator import SearchOrchestrator
 def test_provider_filter_labels_do_not_duplicate_builtin_providers(monkeypatch):
     import providers
 
-    class HuggingFaceStub:
-        slug = "huggingface"
-        display_name = "Hugging Face"
-
-        def detect(self) -> bool:
-            return True
-
-    class LMStudioStub:
-        slug = "lmstudio"
-        display_name = "LM Studio"
-
-        def detect(self) -> bool:
-            return True
-
     monkeypatch.setattr(
         providers,
-        "get_all_provider_classes",
-        lambda: [HuggingFaceStub, LMStudioStub],
+        "detect_available_providers",
+        lambda: {
+            "ollama": False,
+            "huggingface": True,
+            "lmstudio": True,
+            "docker": False,
+            "mlx": False,
+        },
     )
 
     assert providers.get_provider_filter_labels() == [

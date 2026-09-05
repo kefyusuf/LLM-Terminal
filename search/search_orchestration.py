@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-# All supported provider slugs
-ALL_PROVIDER_SLUGS = ["ollama", "huggingface", "lmstudio", "docker", "mlx"]
+from providers.capabilities import get_all_provider_capabilities, get_provider_capabilities
 
-# Mapping from UI filter labels to provider slugs
+
+_PROVIDER_CAPABILITIES = get_all_provider_capabilities()
+_TUI_PROVIDER_ORDER = ("ollama", "huggingface", "lmstudio", "docker", "mlx")
+ALL_PROVIDER_SLUGS = [slug for slug in _TUI_PROVIDER_ORDER if slug in _PROVIDER_CAPABILITIES]
 _FILTER_TO_SLUGS: dict[str, list[str]] = {
-    "Ollama": ["ollama"],
-    "Hugging Face": ["huggingface"],
-    "LM Studio": ["lmstudio"],
-    "Docker": ["docker"],
-    "MLX": ["mlx"],
-    "All": ALL_PROVIDER_SLUGS,
+    _PROVIDER_CAPABILITIES[slug].display_name: [slug] for slug in ALL_PROVIDER_SLUGS
 }
+_FILTER_TO_SLUGS["All"] = ALL_PROVIDER_SLUGS
 
 
 def providers_from_filter(current_filter: str) -> list[str]:
@@ -36,13 +34,11 @@ def is_multi_provider(providers: Sequence[str]) -> bool:
 def provider_display_name(providers: Sequence[str]) -> str:
     """Return user-facing provider name for status messages."""
     if len(providers) == 1:
-        return {
-            "ollama": "Ollama",
-            "huggingface": "Hugging Face",
-            "lmstudio": "LM Studio",
-            "docker": "Docker",
-            "mlx": "MLX",
-        }.get(providers[0], providers[0].title())
+        slug = providers[0]
+        try:
+            return get_provider_capabilities(slug).display_name
+        except KeyError:
+            return slug.title()
     return "All Providers"
 
 

@@ -15,6 +15,7 @@ from loguru import logger
 from typing import Any
 
 from providers.base import SearchResult
+from providers.capabilities import get_all_provider_capabilities
 
 
 class BaseProvider(ABC):
@@ -153,29 +154,28 @@ def detect_available_providers() -> dict[str, bool]:
 
 
 def get_provider_display_names() -> dict[str, str]:
-    """Return mapping of provider slug to display name."""
-    names = {
-        "ollama": "Ollama",
-        "huggingface": "Hugging Face",
+    """Return mapping of provider slug to canonical display name."""
+    return {
+        slug: capabilities.display_name
+        for slug, capabilities in get_all_provider_capabilities().items()
     }
-
-    for provider_cls in get_all_provider_classes():
-        with suppress(Exception):
-            names[provider_cls.slug] = provider_cls.display_name
-
-    return names
 
 
 def get_provider_filter_labels() -> list[str]:
-    """Return list of filter labels for the UI provider selector."""
-    labels = ["Ollama", "Hugging Face"]
+    """Return TUI provider labels while preserving the existing selector behavior."""
+    capabilities = get_all_provider_capabilities()
+    availability = detect_available_providers()
+    always_visible = ("ollama", "huggingface")
+    optional = ("lmstudio", "docker", "mlx")
 
-    for provider_cls in get_all_provider_classes():
-        try:
-            instance = provider_cls()
-            if instance.detect() and instance.display_name not in labels:
-                labels.append(instance.display_name)
-        except Exception:
-            logger.debug("Provider {} filter label detection failed, skipping", provider_cls.__name__)
-
+    labels = [
+        capabilities[slug].display_name
+        for slug in always_visible
+        if slug in capabilities
+    ]
+    labels.extend(
+        capabilities[slug].display_name
+        for slug in optional
+        if slug in capabilities and availability.get(slug, False)
+    )
     return labels
