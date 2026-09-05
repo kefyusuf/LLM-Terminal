@@ -45,6 +45,18 @@ def test_installed_cell_markup_detects_installed_marker():
     assert "●" in out
 
 
+def test_installed_cell_markup_renders_unsupported_state_as_dash():
+    out = installed_cell_markup(
+        "N/A",
+        width=3,
+        truncate_plain=_truncate_plain,
+        align_plain=_align_plain,
+    )
+    assert "-" in out
+    assert "·" not in out
+    assert "●" not in out
+
+
 def test_source_cell_markup_hf_uses_provider_color():
     out = source_cell_markup(
         "Hugging Face",
