@@ -42,6 +42,7 @@ def _default_download_db_path() -> Path:
 
 
 def _default_hf_models_dir() -> Path:
+    """Return the persistent per-user directory used for Hugging Face model files."""
     return _default_data_dir() / "models"
 
 
