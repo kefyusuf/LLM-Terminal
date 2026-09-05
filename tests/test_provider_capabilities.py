@@ -1,7 +1,11 @@
 """Regression tests for canonical provider capability metadata."""
 
-from providers import get_all_provider_classes
-from providers.capabilities import get_all_provider_capabilities, get_provider_capabilities
+from providers import (
+    ProviderCapabilities,
+    get_all_provider_capabilities,
+    get_all_provider_classes,
+    get_provider_capabilities,
+)
 
 
 def test_capability_registry_covers_all_registered_providers():
@@ -10,6 +14,13 @@ def test_capability_registry_covers_all_registered_providers():
     capability_slugs = set(get_all_provider_capabilities())
 
     assert registered_slugs == capability_slugs
+
+
+def test_capability_helpers_are_exported_from_provider_package():
+    """Consumers may use the provider package as the public capability import surface."""
+    capabilities = get_provider_capabilities("huggingface")
+    assert isinstance(capabilities, ProviderCapabilities)
+    assert get_all_provider_capabilities()["huggingface"] == capabilities
 
 
 def test_download_capabilities_match_current_download_manager_support():
