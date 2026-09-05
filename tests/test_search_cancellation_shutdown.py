@@ -14,38 +14,36 @@ class _Monitor:
         return {"has_gpu": False, "ram_total": 16.0}
 
 
-class _FastOllama:
-    def search_with_installed(self, query, specs, limit=15, *, page=0):
-        return SearchResult(results=[{"id": "fast"}])
-
-
 class _BlockingHF:
-    def __init__(self, release: threading.Event):
+    def __init__(self, started: threading.Event, release: threading.Event):
+        self.started = started
         self.release = release
 
     def search(self, query, specs, limit=15, *, page=0, hf_token=None):
+        self.started.set()
         self.release.wait(timeout=2)
         return SearchResult(results=[{"id": "slow"}])
 
 
 def test_mid_search_cancel_does_not_wait_for_running_provider():
     """Cancellation should return before an already-running provider finishes."""
+    hf_started = threading.Event()
     release = threading.Event()
     fast_completed = threading.Event()
 
-    class _FastOllamaWithSignal(_FastOllama):
+    class _FastOllama:
         def search_with_installed(self, query, specs, limit=15, *, page=0):
-            result = super().search_with_installed(query, specs, limit=limit, page=page)
+            assert hf_started.wait(timeout=1)
             fast_completed.set()
-            return result
+            return SearchResult(results=[{"id": "fast"}])
 
     def cancel_check():
         return fast_completed.is_set()
 
     orchestrator = SearchOrchestrator(
         monitor=_Monitor(),
-        hf_provider=_BlockingHF(release),
-        ollama_provider=_FastOllamaWithSignal(),
+        hf_provider=_BlockingHF(hf_started, release),
+        ollama_provider=_FastOllama(),
         on_progress=lambda *_: None,
         cancel_check=cancel_check,
     )
