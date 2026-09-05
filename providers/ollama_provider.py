@@ -387,11 +387,8 @@ def search_ollama_models(query, specs, local_models, page=0, page_size=15):
     except (ValueError, AttributeError) as exc:
         errors.append(f"Ollama parse failed: {exc}")
 
-    # Ollama returns all results at once (no pagination support)
-    # Slice to page_size for consistency with HF pagination
+    # Ollama returns all results at once (no page-offset support).
+    # Keep the result cap for consistency, but never advertise a next page.
     limited_results = results[:page_size] if len(results) > page_size else results
 
-    # has_more_pages is True if we have more results than page_size
-    has_more_pages = len(results) > page_size
-
-    return limited_results, errors, has_more_pages
+    return limited_results, errors, False
