@@ -86,7 +86,7 @@ def has_more_pages_for_results(
     page_size: int,
 ) -> bool:
     """Compute whether next-page navigation should be enabled."""
-    if selection_supports_pagination(providers) and hf_result_count > 0:
+    if is_hf_provider_selection(providers) and hf_result_count > 0:
         return hf_result_count == page_size
     if "ollama" in providers and ollama_result_count > 0:
         return False
