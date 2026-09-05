@@ -1,7 +1,5 @@
 """Regression coverage for non-paginated provider search flags."""
 
-from pathlib import Path
-
 from providers.docker_provider import DockerProvider
 from providers.mlx_provider import MLXProvider
 from providers.ollama_provider import search_ollama_models
@@ -68,7 +66,7 @@ def test_docker_search_never_advertises_page_navigation(monkeypatch):
     assert result.has_more_pages is False
 
 
-def test_mlx_search_never_advertises_page_navigation(monkeypatch, tmp_path: Path):
+def test_mlx_search_never_advertises_page_navigation(monkeypatch, tmp_path):
     """MLX local-cache search has no page-offset contract."""
     for index in range(3):
         (tmp_path / f"models--mlx-community--model-{index}").mkdir()
