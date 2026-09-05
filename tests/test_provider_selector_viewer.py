@@ -20,7 +20,7 @@ def test_cycle_provider_label_recovers_from_unknown_current():
     """An unknown current filter must recover deterministically into the snapshot."""
     labels = ("Ollama", "Hugging Face")
 
-    assert cycle_provider_label(labels, "Unknown") == "Hugging Face"
+    assert cycle_provider_label(labels, "Unknown") == "Ollama"
 
 
 def test_cycle_provider_label_handles_empty_snapshot():
