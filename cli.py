@@ -9,8 +9,23 @@ import config
 from core import cache_db
 from core.hardware import HardwareMonitor, check_ollama_running
 from downloads.service_client import get_service_health
+from providers.capabilities import get_all_provider_capabilities
 
 console = Console()
+
+
+_CLI_SEARCH_PROVIDER_ORDER = ("ollama", "huggingface")
+
+
+def get_cli_search_provider_choices() -> tuple[str, ...]:
+    """Return CLI search choices validated against canonical provider metadata."""
+    capabilities = get_all_provider_capabilities()
+    supported = tuple(
+        slug
+        for slug in _CLI_SEARCH_PROVIDER_ORDER
+        if slug in capabilities and capabilities[slug].searchable
+    )
+    return ("all", *supported)
 
 
 def get_version() -> str:
@@ -81,7 +96,10 @@ def system_info():
 @cli.command()
 @click.argument("query")
 @click.option(
-    "--provider", "-p", type=click.Choice(["ollama", "huggingface", "all"]), default="all"
+    "--provider",
+    "-p",
+    type=click.Choice(get_cli_search_provider_choices()),
+    default="all",
 )
 @click.option("--limit", "-n", default=10, help="Max results")
 @click.option(
