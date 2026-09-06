@@ -54,18 +54,18 @@ def test_loopback_bind_remains_token_optional(monkeypatch):
 
 
 def test_service_client_rejects_non_loopback_plaintext_target(monkeypatch):
-    """The client must reject remote HTTP targets before constructing a request."""
+    """The client must reject remote HTTP targets before opening a connection."""
     called = False
 
-    def fake_urlopen(request, timeout):
+    def fake_open(request, timeout):
         """Record any unexpected network attempt."""
         nonlocal called
         called = True
-        raise AssertionError("urlopen must not be called for non-loopback HTTP")
+        raise AssertionError("opener must not be called for non-loopback HTTP")
 
     monkeypatch.setattr(config.settings, "download_service_host", "192.0.2.10")
     monkeypatch.setattr(config.settings, "download_service_token", "secret-token")
-    monkeypatch.setattr(service_client, "urlopen", fake_urlopen)
+    monkeypatch.setattr(service_client._NO_PROXY_OPENER, "open", fake_open)
 
     with pytest.raises(RuntimeError, match="authenticated TLS transport"):
         service_client.get_service_health(timeout=1.25)
@@ -77,7 +77,7 @@ def test_service_client_forwards_configured_bearer_token(monkeypatch):
     captured = {}
 
     class _ResponseStub:
-        """Act as a minimal urlopen response context manager."""
+        """Act as a minimal opener response context manager."""
 
         def __enter__(self):
             """Return the response stub for context-manager use."""
@@ -91,7 +91,7 @@ def test_service_client_forwards_configured_bearer_token(monkeypatch):
             """Return a deterministic JSON response body."""
             return b'{"ok": true}'
 
-    def fake_urlopen(request, timeout):
+    def fake_open(request, timeout):
         """Capture the outbound Authorization header."""
         captured["authorization"] = request.get_header("Authorization")
         captured["timeout"] = timeout
@@ -99,10 +99,29 @@ def test_service_client_forwards_configured_bearer_token(monkeypatch):
 
     monkeypatch.setattr(config.settings, "download_service_host", "127.0.0.1")
     monkeypatch.setattr(config.settings, "download_service_token", "secret-token")
-    monkeypatch.setattr(service_client, "urlopen", fake_urlopen)
+    monkeypatch.setattr(service_client._NO_PROXY_OPENER, "open", fake_open)
 
     assert service_client.get_service_health(timeout=1.25) == {"ok": True}
     assert captured == {"authorization": "Bearer secret-token", "timeout": 1.25}
+
+
+def test_service_client_formats_ipv6_loopback_url(monkeypatch):
+    """IPv6 loopback literals must be bracketed in HTTP URLs."""
+    monkeypatch.setattr(config.settings, "download_service_host", "::1")
+    monkeypatch.setattr(config.settings, "download_service_port", 8765)
+
+    assert service_client.service_base_url() == "http://[::1]:8765"
+
+
+def test_service_client_opener_disables_environment_proxies():
+    """The dedicated loopback opener must carry an empty proxy mapping."""
+    proxy_handlers = [
+        handler
+        for handler in service_client._NO_PROXY_OPENER.handlers
+        if handler.__class__.__name__ == "ProxyHandler"
+    ]
+    assert len(proxy_handlers) == 1
+    assert proxy_handlers[0].proxies == {}
 
 
 def test_handler_keeps_health_public_and_protects_jobs():
