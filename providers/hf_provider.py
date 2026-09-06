@@ -5,6 +5,7 @@ from huggingface_hub.errors import HfHubHTTPError
 from requests.exceptions import RequestException
 
 from core import cache_db
+from core.errors import ProviderError
 from core.scoring import enrich_result_with_scores
 from core.utils import (
     calculate_fit,
@@ -60,9 +61,11 @@ class HuggingFaceProvider:
             page (int): Zero-based result page to retrieve.
 
         Returns:
-            SearchResult: Matching models, any search errors, and pagination information.
+            SearchResult: Matching models, any search errors, pagination information,
+            and additive structured diagnostics.
         """
         offset = page * limit
+        structured_errors: list[ProviderError] = []
         results, errors, has_more_pages = search_hf_models(
             query,
             specs,
@@ -72,11 +75,13 @@ class HuggingFaceProvider:
             hf_token=hf_token,
             lookahead=1,
             return_page_info=True,
+            _structured_error_sink=structured_errors.append,
         )
         return SearchResult(
             results=results[:limit],
             errors=list(errors),
             has_more_pages=has_more_pages,
+            structured_errors=structured_errors,
         )
 
     def list_installed(self) -> list[str]:
@@ -203,6 +208,7 @@ def search_hf_models(
     hf_token=None,
     lookahead=0,
     return_page_info=False,
+    _structured_error_sink=None,
 ):
     """
     Search Hugging Face for GGUF models matching a query.
@@ -216,16 +222,40 @@ def search_hf_models(
         hf_token: Optional Hugging Face API token.
         lookahead: Number of additional raw results to fetch for page-boundary detection.
         return_page_info: Whether to include the page-availability flag in the return value.
+        _structured_error_sink: Optional internal callback receiving ``ProviderError`` values.
 
     Returns:
         A tuple containing the parsed model results and parsing or request errors.
         When `return_page_info` is true, includes a third boolean indicating whether
-        additional raw results are available.
+        additional raw results are available. Structured diagnostics are additive and
+        do not change this public tuple shape.
     """
     results = []
     errors = []
     found_keys = set()
     window_size = limit + max(int(lookahead), 0)
+
+    def _record_error(
+        message,
+        *,
+        code,
+        retryable=False,
+        status_code=None,
+        retry_after_seconds=None,
+    ):
+        """Append the legacy string and optionally emit a structured diagnostic."""
+        errors.append(message)
+        if _structured_error_sink is not None:
+            _structured_error_sink(
+                ProviderError(
+                    provider=HuggingFaceProvider.slug,
+                    code=code,
+                    message=message,
+                    retryable=retryable,
+                    status_code=status_code,
+                    retry_after_seconds=retry_after_seconds,
+                )
+            )
 
     def _return(has_more_pages=False):
         """
@@ -253,13 +283,28 @@ def search_hf_models(
         )
         raw_window = raw_models[offset : offset + window_size]
     except HfHubHTTPError as exc:
-        errors.append(_format_hf_http_error(exc))
+        status = _get_status_code(exc)
+        retry_after = _get_retry_after_seconds(exc)
+        message = _format_hf_http_error(exc)
+        _record_error(
+            message,
+            code="rate_limited" if status == 429 else "http_error",
+            retryable=_is_retryable_hf_http_error(exc),
+            status_code=status,
+            retry_after_seconds=float(retry_after) if retry_after is not None else None,
+        )
         return _return()
     except RequestException as exc:
-        errors.append(f"Hugging Face search failed: {exc}")
+        message = f"Hugging Face search failed: {exc}"
+        _record_error(message, code="transport_error", retryable=True)
         return _return()
-    except (ValueError, OSError) as exc:
-        errors.append(f"Hugging Face search failed: {exc}")
+    except ValueError as exc:
+        message = f"Hugging Face search failed: {exc}"
+        _record_error(message, code="search_error", retryable=False)
+        return _return()
+    except OSError as exc:
+        message = f"Hugging Face search failed: {exc}"
+        _record_error(message, code="transport_error", retryable=True)
         return _return()
 
     has_more_pages = len(raw_window) > limit
@@ -337,7 +382,8 @@ def search_hf_models(
             RequestException,
             OSError,
         ) as exc:
-            errors.append(f"Hugging Face model parse failed: {exc}")
+            message = f"Hugging Face model parse failed: {exc}"
+            _record_error(message, code="parse_error", retryable=False)
 
     return _return(has_more_pages)
 
