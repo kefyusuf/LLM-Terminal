@@ -101,7 +101,10 @@ def test_provider_marks_model_parse_failure_structured():
 
         likes = 0
         downloads = 0
-        siblings = []
+
+        def __init__(self):
+            """Initialize mutable sibling metadata per fixture instance."""
+            self.siblings = []
 
     provider = HuggingFaceProvider(model_info_cache={})
     with patch("providers.hf_provider.HfApi.list_models", return_value=[BrokenModel()]):
