@@ -1,9 +1,10 @@
+import ipaddress
 import json
 import subprocess
 import sys
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 import config
 
@@ -12,14 +13,42 @@ try:
 except ImportError:  # pragma: no cover - exercised only in lightweight envs
     psutil = None
 
-MIN_SERVICE_VERSION = "1.7"
+MIN_SERVICE_VERSION = "1.8"
+_NO_PROXY_OPENER = build_opener(ProxyHandler({}))
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return whether *host* is an explicit loopback address or localhost."""
+    normalized = str(host).strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _url_host(host: str) -> str:
+    """Return a URL-safe host, bracketing IPv6 literals when required."""
+    normalized = str(host).strip()
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return normalized
+    if address.version == 6:
+        return f"[{normalized}]"
+    return normalized
 
 
 def service_base_url():
-    """Return the configured download-service base URL."""
+    """Return the configured loopback-only download-service base URL."""
     host = config.settings.download_service_host
     port = config.settings.download_service_port
-    return f"http://{host}:{port}"
+    if not _is_loopback_host(host):
+        raise RuntimeError(
+            "Non-loopback download-service clients are disabled until authenticated TLS transport is supported"
+        )
+    return f"http://{_url_host(host)}:{port}"
 
 
 def _parse_version(version_str):
@@ -35,9 +64,11 @@ def _parse_version(version_str):
 
 
 def _request(method, path, payload=None, timeout=2.0):
-    """Send an HTTP request to the local download service and return parsed JSON.
+    """Send an HTTP request directly to the loopback download service.
 
-    Raises any network or HTTP errors to the caller.
+    Adds the configured bearer token only to the initial request. Non-loopback
+    plaintext targets are rejected before request construction, environment proxy
+    settings are bypassed, and redirects cannot forward the bearer token.
     """
     url = f"{service_base_url()}{path}"
     data = None
@@ -46,7 +77,10 @@ def _request(method, path, payload=None, timeout=2.0):
         data = json.dumps(payload).encode("utf-8")
 
     req = Request(url=url, data=data, method=method, headers=headers)
-    with urlopen(req, timeout=timeout) as response:
+    token = config.settings.download_service_token
+    if token:
+        req.add_unredirected_header("Authorization", f"Bearer {token}")
+    with _NO_PROXY_OPENER.open(req, timeout=timeout) as response:
         body = response.read().decode("utf-8")
         if not body:
             return {}
@@ -58,7 +92,7 @@ def is_service_running():
     try:
         data = _request("GET", "/health", timeout=1.0)
         return bool(data.get("ok"))
-    except (URLError, HTTPError, TimeoutError, ValueError):
+    except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
         return False
 
 
@@ -105,7 +139,7 @@ def _wait_for_service(deadline_seconds=6.0):
             health = get_service_health()
             if health.get("ok") and is_service_compatible(health):
                 return True
-        except (URLError, HTTPError, TimeoutError, ValueError):
+        except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
             pass
         time.sleep(0.2)
     return False
@@ -124,7 +158,7 @@ def stop_service():
     try:
         _request("POST", "/shutdown", payload={}, timeout=1.0)
         stopped_any = True
-    except (URLError, HTTPError, TimeoutError, ValueError):
+    except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
         pass
 
     if psutil is not None:
@@ -160,7 +194,7 @@ def ensure_service_running():
             if is_service_compatible(health):
                 return True
             stop_service()
-        except (URLError, HTTPError, TimeoutError, ValueError):
+        except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
             stop_service()
 
     _start_service_process()
