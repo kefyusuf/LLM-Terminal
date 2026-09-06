@@ -36,27 +36,27 @@ class SearchResult:
         errors: Backward-compatible list of human-readable error messages.
             Existing CLI, TUI, REST, and provider callers continue to use
             this surface unchanged during structured-error migration.
-        structured_errors: Machine-readable provider diagnostics. This is
-            additive and may remain empty while a provider has not yet been
-            migrated to populate structured errors.
         has_more_pages: True if the provider has more results beyond
             the current page. For providers without real pagination
             (Ollama), this is computed by comparing result count
             against ``page_size``.
+        structured_errors: Machine-readable provider diagnostics. This is
+            additive and may remain empty while a provider has not yet been
+            migrated to populate structured errors.
     """
 
     results: list[dict] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
-    structured_errors: list[ProviderError] = field(default_factory=list)
     has_more_pages: bool = False
+    structured_errors: list[ProviderError] = field(default_factory=list)
 
     def extend(self, other: SearchResult) -> SearchResult:
         """Merge *other* into a new SearchResult without mutating either input."""
         return SearchResult(
             results=self.results + other.results,
             errors=self.errors + other.errors,
-            structured_errors=self.structured_errors + other.structured_errors,
             has_more_pages=self.has_more_pages or other.has_more_pages,
+            structured_errors=self.structured_errors + other.structured_errors,
         )
 
     @classmethod
