@@ -14,6 +14,7 @@ up a real subprocess service.
 
 from __future__ import annotations
 
+import hmac
 import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
@@ -27,8 +28,8 @@ def _has_duplicates(values):
     return len(values) != len(set(values))
 
 
-def _make_handler(state):
-    """Build a Handler class bound to *state*.
+def _make_handler(state, auth_token: str | None = None):
+    """Build a Handler class bound to *state* and an optional bearer token.
 
     BaseHTTPRequestHandler is instantiated per request, so we close
     over *state* in a small factory rather than referencing the
@@ -43,15 +44,21 @@ def _make_handler(state):
     _can_term = _can_terminate_process
 
     class Handler(BaseHTTPRequestHandler):
-        def _json_response(self, status_code, payload):
+        """Serve download-service requests against the factory-bound state."""
+
+        def _json_response(self, status_code, payload, extra_headers=None):
+            """Write one JSON response with optional extra headers."""
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
         def _read_json(self):
+            """Read and decode the request JSON body, returning an empty dict if absent."""
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0:
                 return {}
@@ -60,10 +67,33 @@ def _make_handler(state):
                 return {}
             return json.loads(raw)
 
+        def _is_authorized(self) -> bool:
+            """Return whether this request satisfies the configured bearer token."""
+            if not auth_token:
+                return True
+            supplied = self.headers.get("Authorization", "")
+            expected = f"Bearer {auth_token}"
+            return hmac.compare_digest(supplied, expected)
+
+        def _require_auth(self) -> bool:
+            """Reject unauthorized requests and return whether dispatch may continue."""
+            if self._is_authorized():
+                return True
+            self._json_response(
+                401,
+                {"error": "unauthorized"},
+                {"WWW-Authenticate": "Bearer"},
+            )
+            return False
+
         def do_GET(self):
+            """Dispatch GET requests, leaving only the health endpoint public."""
             parsed = urlparse(self.path)
             if parsed.path == "/health":
                 self._json_response(200, {"ok": True, "version": SERVICE_VERSION})
+                return
+
+            if not self._require_auth():
                 return
 
             if parsed.path == "/debug/active":
@@ -91,6 +121,10 @@ def _make_handler(state):
             self._json_response(404, {"error": "not found"})
 
         def do_POST(self):
+            """Dispatch authenticated mutation requests."""
+            if not self._require_auth():
+                return
+
             if self.path == "/jobs":
                 try:
                     payload = self._read_json()
@@ -168,6 +202,7 @@ def _make_handler(state):
             self._json_response(404, {"error": "not found"})
 
         def log_message(self, format, *args):
+            """Suppress the default BaseHTTPRequestHandler access log."""
             return
 
     return Handler
@@ -178,9 +213,12 @@ def _make_handler(state):
 # imported lazily at module-load time (after download_service.py has
 # finished initialising) to break the circular dependency.
 def _build_default_handler():
+    """Build the production handler from process-wide state and settings."""
+    import config
+
     from .download_service import STATE
 
-    return _make_handler(STATE)
+    return _make_handler(STATE, auth_token=config.settings.download_service_token)
 
 
 Handler = _build_default_handler()
