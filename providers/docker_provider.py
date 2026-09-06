@@ -9,8 +9,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from requests.exceptions import RequestException
+from requests.exceptions import RequestException, Timeout
 
+from core.errors import ProviderError
 from core.http_client import get_session
 from core.scoring import enrich_result_with_scores
 from core.utils import (
@@ -20,6 +21,7 @@ from core.utils import (
     estimate_model_size_gb,
     extract_params,
     infer_quant_from_name,
+    parse_retry_after_seconds,
 )
 from providers import BaseProvider
 from providers.base import SearchResult
@@ -57,8 +59,29 @@ class DockerProvider(BaseProvider):
         try:
             resp = get_session().get(f"{self.host}/models", timeout=5)
             if resp.status_code != 200:
-                errors.append(f"Docker Model Runner API error (HTTP {resp.status_code})")
-                return SearchResult(results=results, errors=errors)
+                message = f"Docker Model Runner API error (HTTP {resp.status_code})"
+                errors.append(message)
+                status_code = resp.status_code
+                retryable = status_code == 429 or 500 <= status_code <= 599
+                code = "rate_limited" if status_code == 429 else "http_error"
+                retry_after = None
+                if status_code == 429:
+                    headers = getattr(resp, "headers", None) or {}
+                    retry_after = parse_retry_after_seconds(headers.get("Retry-After"))
+                return SearchResult(
+                    results=results,
+                    errors=errors,
+                    structured_errors=[
+                        ProviderError(
+                            provider=self.slug,
+                            code=code,
+                            message=message,
+                            retryable=retryable,
+                            status_code=status_code,
+                            retry_after_seconds=retry_after,
+                        )
+                    ],
+                )
 
             data = resp.json()
             # Docker Model Runner returns a list or {"models": [...]}
@@ -114,7 +137,21 @@ class DockerProvider(BaseProvider):
                     break
 
         except RequestException as exc:
-            errors.append(f"Docker Model Runner request failed: {exc}")
+            message = f"Docker Model Runner request failed: {exc}"
+            errors.append(message)
+            code = "timeout" if isinstance(exc, Timeout) else "transport_error"
+            return SearchResult(
+                results=results,
+                errors=errors,
+                structured_errors=[
+                    ProviderError(
+                        provider=self.slug,
+                        code=code,
+                        message=message,
+                        retryable=True,
+                    )
+                ],
+            )
 
         return SearchResult(results=results, errors=errors, has_more_pages=len(results) > limit)
 
