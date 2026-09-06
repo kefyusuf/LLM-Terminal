@@ -9,10 +9,12 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from requests.exceptions import RequestException
+from requests.exceptions import RequestException, Timeout
 
+from core.errors import ProviderError
 from core.http_client import get_session
 from core.scoring import enrich_result_with_scores
+from core.utils import parse_retry_after_seconds
 from providers import BaseProvider
 from providers.base import SearchResult
 
@@ -77,11 +79,43 @@ class LMStudioProvider(BaseProvider):
         try:
             resp = get_session().get(f"{self.host}/v1/models", timeout=5)
             if resp.status_code != 200:
-                return SearchResult(errors=[f"LM Studio API returned status {resp.status_code}"])
+                message = f"LM Studio API returned status {resp.status_code}"
+                status_code = resp.status_code
+                retryable = status_code == 429 or status_code >= 500
+                code = "rate_limited" if status_code == 429 else "http_error"
+                retry_after = None
+                if status_code == 429:
+                    headers = getattr(resp, "headers", None) or {}
+                    retry_after = parse_retry_after_seconds(headers.get("Retry-After"))
+                return SearchResult(
+                    errors=[message],
+                    structured_errors=[
+                        ProviderError(
+                            provider=self.slug,
+                            code=code,
+                            message=message,
+                            retryable=retryable,
+                            status_code=status_code,
+                            retry_after_seconds=retry_after,
+                        )
+                    ],
+                )
 
             data = resp.json()
         except RequestException as exc:
-            return SearchResult(errors=[f"LM Studio search failed: {exc}"])
+            message = f"LM Studio search failed: {exc}"
+            code = "timeout" if isinstance(exc, Timeout) else "transport_error"
+            return SearchResult(
+                errors=[message],
+                structured_errors=[
+                    ProviderError(
+                        provider=self.slug,
+                        code=code,
+                        message=message,
+                        retryable=True,
+                    )
+                ],
+            )
 
         results = self._parse_models(data)
 
