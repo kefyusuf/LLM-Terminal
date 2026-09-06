@@ -26,7 +26,14 @@ _HF_BACKOFF_MAX_SECONDS = 4.0
 
 
 class HuggingFaceProvider:
-    """Class adapter wrapping the module-level :func:`search_hf_models`."""
+    """Class adapter wrapping the module-level :func:`search_hf_models`.
+
+    The free function is preserved for backward compatibility; the
+    class form lets the orchestrator treat HF the same as every other
+    :class:`BaseProvider` subclass. ``refresh_installed()`` is a no-op
+    since HF has no local-install concept; ``enrich()`` is the
+    :func:`enrich_hf_model_details` function.
+    """
 
     slug = "huggingface"
     display_name = "Hugging Face"
@@ -47,7 +54,16 @@ class HuggingFaceProvider:
         hf_token: str | None = None,
         **kwargs,
     ) -> SearchResult:
-        """Search Hugging Face models and return legacy plus structured diagnostics."""
+        """
+        Search Hugging Face models matching the query and hardware specifications.
+
+        Parameters:
+            page (int): Zero-based result page to retrieve.
+
+        Returns:
+            SearchResult: Matching models, any search errors, pagination information,
+            and additive structured diagnostics.
+        """
         offset = page * limit
         structured_errors: list[ProviderError] = []
         results, errors, has_more_pages = search_hf_models(
@@ -81,18 +97,32 @@ def _repo_id_from_model(model):
 
 
 def _select_preferred_gguf(siblings):
-    """Choose the preferred GGUF file from a list of repo sibling objects."""
+    """Choose the preferred GGUF file from a list of repo sibling objects.
+
+    Preference order: Q4_K_M → Q4_0 → Q5_K_M → any ``.gguf``.
+    Returns ``None`` if no GGUF file is found.
+    """
     filenames = [item.rfilename for item in siblings if getattr(item, "rfilename", None)]
     priorities = ["Q4_K_M.gguf", "Q4_0.gguf", "Q5_K_M.gguf"]
+
     for suffix in priorities:
         target = next((name for name in filenames if suffix in name), None)
         if target:
             return target
+
     return next((name for name in filenames if name.endswith(".gguf")), None)
 
 
 def classify_hidden_gem(downloads, likes):
-    """Classify a model as a hidden gem based on its download and like counts."""
+    """Classify a model as a hidden gem based on its download and like counts.
+
+    A hidden gem has significant downloads but low public visibility (few
+    likes relative to download volume).
+
+    Returns:
+        ``(is_gem: bool, gem_score: float)`` — score is higher for more
+        gem-like models.
+    """
     if downloads < 5000:
         return False, 0.0
     if likes > 200:
@@ -165,6 +195,7 @@ def _list_hf_models_with_retry(api, **kwargs):
             if attempt >= _HF_MAX_ATTEMPTS:
                 raise
             time.sleep(_hf_retry_delay_seconds(exc, attempt))
+
     raise RuntimeError("Hugging Face retry loop exhausted unexpectedly")
 
 
@@ -179,7 +210,26 @@ def search_hf_models(
     return_page_info=False,
     _structured_error_sink=None,
 ):
-    """Search Hugging Face while preserving the legacy public tuple contract."""
+    """
+    Search Hugging Face for GGUF models matching a query.
+
+    Args:
+        query: Free-text search string.
+        specs: Hardware specification dictionary used to determine model fit.
+        model_info_cache: Shared cache for Hugging Face repository metadata.
+        limit: Maximum number of models to process.
+        offset: Number of raw search results to skip.
+        hf_token: Optional Hugging Face API token.
+        lookahead: Number of additional raw results to fetch for page-boundary detection.
+        return_page_info: Whether to include the page-availability flag in the return value.
+        _structured_error_sink: Optional internal callback receiving ``ProviderError`` values.
+
+    Returns:
+        A tuple containing the parsed model results and parsing or request errors.
+        When `return_page_info` is true, includes a third boolean indicating whether
+        additional raw results are available. Structured diagnostics are additive and
+        do not change this public tuple shape.
+    """
     results = []
     errors = []
     found_keys = set()
@@ -208,7 +258,15 @@ def search_hf_models(
             )
 
     def _return(has_more_pages=False):
-        """Package results using the established two- or three-item tuple contract."""
+        """
+        Package search results with optional pagination information.
+
+        Parameters:
+            has_more_pages (bool): Whether additional result pages are available.
+
+        Returns:
+            tuple: Search results and errors, optionally followed by a pagination flag.
+        """
         if return_page_info:
             return results, errors, has_more_pages
         return results, errors
@@ -251,6 +309,7 @@ def search_hf_models(
 
     has_more_pages = len(raw_window) > limit
     page_models = raw_window[:limit]
+
     hf_lists_installed = get_provider_capabilities(HuggingFaceProvider.slug).lists_installed
 
     for model in page_models:
@@ -258,6 +317,7 @@ def search_hf_models(
             repo_id = _repo_id_from_model(model)
             if not repo_id:
                 raise ValueError("missing model repository id")
+
             publisher = repo_id.split("/")[0]
             provider = publisher[:15]
             name = repo_id.split("/")[-1]
@@ -280,6 +340,7 @@ def search_hf_models(
             size = estimate_model_size_gb(name)
             siblings = getattr(model, "siblings", None) or []
             target = _select_preferred_gguf(siblings)
+
             if target:
                 quant = target.split(".")[-2] if len(target.split(".")) > 2 else "GGUF"
                 if "gguf" in quant.lower():
@@ -287,7 +348,9 @@ def search_hf_models(
 
             fit_str, mode_str, _ = calculate_fit(size, specs)
             result_dict = {
-                "inst": "[grey37]-[/grey37]" if hf_lists_installed else "[grey37]N/A[/grey37]",
+                "inst": "[grey37]-[/grey37]"
+                if hf_lists_installed
+                else "[grey37]N/A[/grey37]",
                 "source": "Hugging Face",
                 "provider": provider,
                 "publisher": publisher,
@@ -326,10 +389,21 @@ def search_hf_models(
 
 
 def enrich_hf_model_details(model, specs, model_info_cache):
-    """Enrich a Hugging Face model result with exact GGUF file details."""
+    """
+    Enrich a Hugging Face model result with exact GGUF file details.
+
+    Parameters:
+        model (dict): Model result to update in place.
+        specs: Hardware specifications used to calculate fit and operating mode.
+        model_info_cache: Optional cache for Hugging Face repository metadata.
+
+    Returns:
+        dict: The updated model result, or the original result when repository or file metadata is unavailable.
+    """
     repo_id = model.get("id")
     if not repo_id:
         return model
+
     target = model.get("target_file")
 
     cached = cache_db.get_model_cache("huggingface", repo_id)
@@ -356,6 +430,7 @@ def enrich_hf_model_details(model, specs, model_info_cache):
         info = api.model_info(repo_id, files_metadata=True)
         if model_info_cache is not None:
             model_info_cache[repo_id] = info
+
         siblings = info.siblings or []
         target = target or _select_preferred_gguf(siblings)
         if not target:
@@ -376,6 +451,7 @@ def enrich_hf_model_details(model, specs, model_info_cache):
             quant = "GGUF"
         model["quant"] = quant
         model["target_file"] = target
+
         cache_db.set_model_cache(
             "huggingface",
             repo_id,
@@ -383,4 +459,5 @@ def enrich_hf_model_details(model, specs, model_info_cache):
         )
     except (HfHubHTTPError, RequestException, OSError, ValueError, TypeError):
         return model
+
     return model
