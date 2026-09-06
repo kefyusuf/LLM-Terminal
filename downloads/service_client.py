@@ -66,20 +66,20 @@ def _parse_version(version_str):
 def _request(method, path, payload=None, timeout=2.0):
     """Send an HTTP request directly to the loopback download service.
 
-    Adds the configured bearer token when present. Non-loopback plaintext targets
-    are rejected before request construction, and environment proxy settings are
-    bypassed so loopback credentials cannot be forwarded to a proxy.
+    Adds the configured bearer token only to the initial request. Non-loopback
+    plaintext targets are rejected before request construction, environment proxy
+    settings are bypassed, and redirects cannot forward the bearer token.
     """
     url = f"{service_base_url()}{path}"
     data = None
     headers = {"Content-Type": "application/json"}
-    token = config.settings.download_service_token
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
 
     req = Request(url=url, data=data, method=method, headers=headers)
+    token = config.settings.download_service_token
+    if token:
+        req.add_unredirected_header("Authorization", f"Bearer {token}")
     with _NO_PROXY_OPENER.open(req, timeout=timeout) as response:
         body = response.read().decode("utf-8")
         if not body:
