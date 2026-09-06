@@ -37,6 +37,39 @@ class DockerProvider(BaseProvider):
     def __init__(self):
         self.host = os.environ.get("DOCKER_MODEL_RUNNER_HOST", self.default_host)
 
+    @staticmethod
+    def _parse_model_ids(data: Any) -> list[str]:
+        """Validate a Docker Model Runner response and return model identifiers."""
+        if isinstance(data, list):
+            models = data
+        elif isinstance(data, dict):
+            if "models" in data:
+                models = data["models"]
+            elif "data" in data:
+                models = data["data"]
+            else:
+                models = []
+        else:
+            raise ValueError("expected response to be a list or object")
+
+        if not isinstance(models, list):
+            raise ValueError("expected model collection to be a list")
+
+        model_ids: list[str] = []
+        for model in models:
+            if isinstance(model, str):
+                model_id = model
+            elif isinstance(model, dict):
+                model_id = model.get("id", model.get("name", ""))
+            else:
+                raise ValueError("expected model entry to be a string or object")
+
+            if not isinstance(model_id, str):
+                raise ValueError("expected model id or name to be a string")
+            model_ids.append(model_id)
+
+        return model_ids
+
     def detect(self) -> bool:
         """Check if Docker Model Runner is available."""
         try:
@@ -82,60 +115,6 @@ class DockerProvider(BaseProvider):
                         )
                     ],
                 )
-
-            data = resp.json()
-            # Docker Model Runner returns a list or {"models": [...]}
-            models = data if isinstance(data, list) else data.get("models", data.get("data", []))
-
-            for model in models:
-                if isinstance(model, str):
-                    model_id = model
-                else:
-                    model_id = model.get("id", model.get("name", ""))
-
-                if not model_id:
-                    continue
-                if query and query != "*" and query.lower() not in model_id.lower():
-                    continue
-
-                name = model_id.split("/")[-1] if "/" in model_id else model_id
-                publisher = model_id.split("/")[0] if "/" in model_id else "docker"
-                params = extract_params(name)
-                use_case = determine_use_case(name)
-                use_case_key = determine_use_case_key(name)
-                quant = infer_quant_from_name(name, default="GGUF")
-                size_gb = estimate_model_size_gb(name)
-
-                fit_str, mode_str, _ = calculate_fit(size_gb, specs)
-
-                result = {
-                    "inst": "[green]✔[/green]",
-                    "source": "Docker",
-                    "provider": "Docker",
-                    "publisher": publisher,
-                    "id": model_id,
-                    "name": name,
-                    "params": params,
-                    "use_case": use_case,
-                    "use_case_key": use_case_key,
-                    "score": "[grey50]-[/grey50]",
-                    "likes": 0,
-                    "downloads": 0,
-                    "is_hidden_gem": False,
-                    "gem_score": 0.0,
-                    "quant": quant,
-                    "size_source": "estimated",
-                    "mode": mode_str,
-                    "fit": fit_str,
-                    "size": f"~{size_gb:.1f} GB",
-                    "_size_gb": size_gb,
-                }
-                enrich_result_with_scores(result, specs)
-                results.append(result)
-
-                if len(results) >= limit:
-                    break
-
         except RequestException as exc:
             message = f"Docker Model Runner request failed: {exc}"
             errors.append(message)
@@ -152,6 +131,68 @@ class DockerProvider(BaseProvider):
                     )
                 ],
             )
+
+        try:
+            model_ids = self._parse_model_ids(resp.json())
+        except (ValueError, TypeError, AttributeError) as exc:
+            message = f"Docker Model Runner response parse failed: {exc}"
+            errors.append(message)
+            return SearchResult(
+                results=results,
+                errors=errors,
+                structured_errors=[
+                    ProviderError(
+                        provider=self.slug,
+                        code="parse_error",
+                        message=message,
+                        retryable=False,
+                    )
+                ],
+            )
+
+        for model_id in model_ids:
+            if not model_id:
+                continue
+            if query and query != "*" and query.lower() not in model_id.lower():
+                continue
+
+            name = model_id.split("/")[-1] if "/" in model_id else model_id
+            publisher = model_id.split("/")[0] if "/" in model_id else "docker"
+            params = extract_params(name)
+            use_case = determine_use_case(name)
+            use_case_key = determine_use_case_key(name)
+            quant = infer_quant_from_name(name, default="GGUF")
+            size_gb = estimate_model_size_gb(name)
+
+            fit_str, mode_str, _ = calculate_fit(size_gb, specs)
+
+            result = {
+                "inst": "[green]✔[/green]",
+                "source": "Docker",
+                "provider": "Docker",
+                "publisher": publisher,
+                "id": model_id,
+                "name": name,
+                "params": params,
+                "use_case": use_case,
+                "use_case_key": use_case_key,
+                "score": "[grey50]-[/grey50]",
+                "likes": 0,
+                "downloads": 0,
+                "is_hidden_gem": False,
+                "gem_score": 0.0,
+                "quant": quant,
+                "size_source": "estimated",
+                "mode": mode_str,
+                "fit": fit_str,
+                "size": f"~{size_gb:.1f} GB",
+                "_size_gb": size_gb,
+            }
+            enrich_result_with_scores(result, specs)
+            results.append(result)
+
+            if len(results) >= limit:
+                break
 
         return SearchResult(results=results, errors=errors, has_more_pages=len(results) > limit)
 
