@@ -80,17 +80,10 @@ def validate_page_request(page_num: int, max_pages: int) -> tuple[bool, str | No
 
 
 def has_more_pages_for_results(
-    providers: Sequence[str],
-    hf_result_count: int,
-    ollama_result_count: int,
-    page_size: int,
+    providers: Sequence[str], provider_has_more_pages: bool
 ) -> bool:
-    """Compute whether next-page navigation should be enabled."""
-    if is_hf_provider_selection(providers) and hf_result_count > 0:
-        return hf_result_count == page_size
-    if "ollama" in providers and ollama_result_count > 0:
-        return False
-    return False
+    """Gate a provider-reported continuation flag through pagination capabilities."""
+    return selection_supports_pagination(providers) and provider_has_more_pages
 
 
 def provider_result_count(

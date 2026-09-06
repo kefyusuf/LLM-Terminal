@@ -34,16 +34,14 @@ def test_validate_page_request_rejects_out_of_bounds():
     assert message == "Reached page limit (10)."
 
 
-def test_has_more_pages_for_hf_when_page_full():
-    assert has_more_pages_for_results(
-        ["huggingface"], hf_result_count=15, ollama_result_count=0, page_size=15
-    )
+def test_has_more_pages_trusts_paginated_provider_flag():
+    assert has_more_pages_for_results(["huggingface"], True) is True
+    assert has_more_pages_for_results(["huggingface"], False) is False
 
 
-def test_has_more_pages_for_ollama_always_false():
-    assert not has_more_pages_for_results(
-        ["ollama"], hf_result_count=0, ollama_result_count=20, page_size=15
-    )
+def test_has_more_pages_rejects_nonpaginated_and_multi_provider_flags():
+    assert has_more_pages_for_results(["ollama"], True) is False
+    assert has_more_pages_for_results(["huggingface", "ollama"], True) is False
 
 
 def test_provider_result_count_tracks_selected_provider():
