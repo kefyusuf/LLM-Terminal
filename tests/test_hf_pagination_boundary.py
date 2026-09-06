@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from providers.capabilities import get_provider_capabilities
 from providers.hf_provider import HuggingFaceProvider
 
@@ -23,7 +25,10 @@ def _results(count):
 def test_exact_full_final_page_does_not_report_more_pages():
     """A full final page must not imply another page without lookahead."""
     provider = HuggingFaceProvider(model_info_cache={})
-    with patch("providers.hf_provider.search_hf_models", return_value=(_results(5), [])):
+    with patch(
+        "providers.hf_provider.search_hf_models",
+        return_value=(_results(5), [], False),
+    ):
         result = provider.search("test", _specs(), limit=5, page=2)
 
     assert len(result.results) == 5
@@ -33,11 +38,24 @@ def test_exact_full_final_page_does_not_report_more_pages():
 def test_lookahead_result_reports_more_and_is_not_exposed():
     """One lookahead item should enable Next without leaking into results."""
     provider = HuggingFaceProvider(model_info_cache={})
-    with patch("providers.hf_provider.search_hf_models", return_value=(_results(6), [])):
+    with patch(
+        "providers.hf_provider.search_hf_models",
+        return_value=(_results(6), [], True),
+    ):
         result = provider.search("test", _specs(), limit=5, page=2)
 
     assert len(result.results) == 5
     assert result.has_more_pages is True
+
+
+def test_provider_rejects_legacy_two_item_page_info_response():
+    """The paginated provider adapter must fail if page metadata is missing."""
+    provider = HuggingFaceProvider(model_info_cache={})
+    with (
+        patch("providers.hf_provider.search_hf_models", return_value=(_results(5), [])),
+        pytest.raises(ValueError),
+    ):
+        provider.search("test", _specs(), limit=5, page=2)
 
 
 def test_parse_failure_does_not_pull_lookahead_into_current_page():
