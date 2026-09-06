@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import threading
 from http.server import ThreadingHTTPServer
-from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
