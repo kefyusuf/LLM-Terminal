@@ -21,6 +21,7 @@ files are 200-300 lines each with a single, testable responsibility.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import threading
@@ -36,7 +37,7 @@ import config
 from downloads.runner import process_job
 from downloads.store import DownloadStore
 
-SERVICE_VERSION = "1.7"
+SERVICE_VERSION = "1.8"
 
 
 def download_db_path():
@@ -52,11 +53,37 @@ def service_bind_address() -> tuple[str, int]:
     )
 
 
+def _is_loopback_host(host: str) -> bool:
+    """Return whether *host* is an explicit loopback address or localhost."""
+    normalized = str(host).strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_service_auth_boundary() -> None:
+    """Require a bearer token before allowing a non-loopback service bind."""
+    host, _ = service_bind_address()
+    if _is_loopback_host(host):
+        return
+    if config.settings.download_service_token:
+        return
+    raise RuntimeError(
+        "AIMODEL_DOWNLOAD_SERVICE_TOKEN is required when "
+        "AIMODEL_DOWNLOAD_SERVICE_HOST is not loopback"
+    )
+
+
 def smoke_mode_enabled() -> bool:
+    """Return whether the service should run its bounded smoke check."""
     return os.getenv("AIMODEL_SMOKE") == "1"
 
 
 def ensure_data_dir() -> None:
+    """Create the configured download database directory if needed."""
     download_db_path().parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -165,6 +192,8 @@ def worker_loop():
 
 
 def main():
+    """Run the configured download service or its smoke check."""
+    validate_service_auth_boundary()
     if smoke_mode_enabled():
         return run_smoke_check()
 
@@ -186,6 +215,7 @@ def main():
 
 
 def run_smoke_check() -> int:
+    """Run bounded health and authenticated jobs checks against an ephemeral server."""
     from downloads.api import Handler
 
     STATE.stop_event.clear()
@@ -208,7 +238,11 @@ def run_smoke_check() -> int:
 
     try:
         for path, expected_key in (("/health", "ok"), ("/jobs", "jobs")):
-            with urllib.request.urlopen(f"http://{host}:{port}{path}", timeout=5) as response:
+            request = urllib.request.Request(f"http://{host}:{port}{path}")
+            token = config.settings.download_service_token
+            if token:
+                request.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if expected_key not in payload:
                 raise SystemExit(f"[smoke] download service check failed for {path}")
