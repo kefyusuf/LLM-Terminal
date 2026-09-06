@@ -96,6 +96,7 @@ def smoke_mode_enabled() -> bool:
 class ModelAPIHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the model API."""
 
+    # Shared state (set by server startup)
     monitor: HardwareMonitor = None  # type: ignore[assignment]
 
     def log_message(self, format, *args):
@@ -201,6 +202,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         specs = self.monitor.get_specs()
         results = []
 
+        # Search providers
         if provider in ("all", "ollama"):
             local = get_installed_ollama_models()
             ollama_results, _, _ = search_ollama_models(
@@ -218,11 +220,13 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
             )
             results.extend(hf_results)
 
+        # Filter
         if use_case != "all":
             results = [r for r in results if r.get("use_case_key") == use_case]
         if min_fit != "all":
             results = [r for r in results if min_fit in r.get("fit", "").lower()]
 
+        # Sort
         if sort_by == "composite":
             results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
         elif sort_by == "speed":
@@ -232,6 +236,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         elif sort_by == "name":
             results.sort(key=lambda r: r.get("name", "").lower())
 
+        # Serialize
         models = []
         for r in results[:limit]:
             models.append(
@@ -276,6 +281,7 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         except (ValueError, IndexError):
             return self._error("Invalid 'limit' parameter; expected integer.", 400)
 
+        # Forward to models endpoint with composite sort
         params["sort"] = ["composite"]
         params["limit"] = [str(limit)]
         self._handle_models(params)
