@@ -113,15 +113,29 @@ def test_service_client_formats_ipv6_loopback_url(monkeypatch):
     assert service_client.service_base_url() == "http://[::1]:8765"
 
 
-def test_service_client_opener_disables_environment_proxies():
-    """The dedicated loopback opener must carry an empty proxy mapping."""
-    proxy_handlers = [
-        handler
-        for handler in service_client._NO_PROXY_OPENER.handlers
-        if handler.__class__.__name__ == "ProxyHandler"
-    ]
-    assert len(proxy_handlers) == 1
-    assert proxy_handlers[0].proxies == {}
+def test_service_client_bypasses_environment_proxies(monkeypatch):
+    """Loopback service requests must ignore configured HTTP proxy variables."""
+    handler = _make_handler(_StateStub())
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setattr(config.settings, "download_service_host", host)
+    monkeypatch.setattr(config.settings, "download_service_port", port)
+    monkeypatch.setattr(config.settings, "download_service_token", None)
+
+    try:
+        assert service_client.get_service_health(timeout=2) == {
+            "ok": True,
+            "version": "1.8",
+        }
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
 
 
 def test_handler_keeps_health_public_and_protects_jobs():
