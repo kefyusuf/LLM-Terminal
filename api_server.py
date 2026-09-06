@@ -38,7 +38,8 @@ from providers.ollama_provider import get_installed_ollama_models, search_ollama
 API_VERSION = "1.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
-VALID_MODEL_PROVIDERS = {"all", "ollama", "huggingface"}
+REST_MODEL_PROVIDER_SLUGS = ("ollama", "huggingface")
+VALID_MODEL_PROVIDERS = {"all", *REST_MODEL_PROVIDER_SLUGS}
 MAX_MODEL_LIMIT = 100
 PROVIDER_API_BASES = {
     "huggingface": "https://huggingface.co",
@@ -56,6 +57,37 @@ def get_provider_api_bases() -> dict[str, str]:
     }
 
 
+def get_rest_model_provider_slugs() -> tuple[str, ...]:
+    """Return provider slugs directly supported by the REST models endpoint."""
+    return REST_MODEL_PROVIDER_SLUGS
+
+
+def build_provider_descriptors(
+    availability: dict[str, bool], api_bases: dict[str, str]
+) -> list[dict]:
+    """Build REST provider descriptors without conflating global and endpoint capabilities."""
+    rest_model_providers = set(get_rest_model_provider_slugs())
+    providers = []
+    for slug, capabilities in get_all_provider_capabilities().items():
+        providers.append(
+            {
+                "name": slug,
+                "display_name": capabilities.display_name,
+                "available": availability.get(slug, False),
+                "api_base": api_bases.get(slug, ""),
+                "models_endpoint": slug in rest_model_providers,
+                "capabilities": {
+                    "searchable": capabilities.searchable,
+                    "detectable": capabilities.detectable,
+                    "lists_installed": capabilities.lists_installed,
+                    "downloadable": capabilities.downloadable,
+                    "paginated": capabilities.paginated,
+                },
+            }
+        )
+    return providers
+
+
 def smoke_mode_enabled() -> bool:
     """Return whether API smoke mode is enabled for the current process."""
     return os.getenv("AIMODEL_SMOKE") == "1"
@@ -64,7 +96,6 @@ def smoke_mode_enabled() -> bool:
 class ModelAPIHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the model API."""
 
-    # Shared state (set by server startup)
     monitor: HardwareMonitor = None  # type: ignore[assignment]
 
     def log_message(self, format, *args):
@@ -170,10 +201,11 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         specs = self.monitor.get_specs()
         results = []
 
-        # Search providers
         if provider in ("all", "ollama"):
             local = get_installed_ollama_models()
-            ollama_results, _, _ = search_ollama_models(query or "*", specs, local, page_size=limit)
+            ollama_results, _, _ = search_ollama_models(
+                query or "*", specs, local, page_size=limit
+            )
             results.extend(ollama_results)
 
         if provider in ("all", "huggingface"):
@@ -186,13 +218,11 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
             )
             results.extend(hf_results)
 
-        # Filter
         if use_case != "all":
             results = [r for r in results if r.get("use_case_key") == use_case]
         if min_fit != "all":
             results = [r for r in results if min_fit in r.get("fit", "").lower()]
 
-        # Sort
         if sort_by == "composite":
             results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
         elif sort_by == "speed":
@@ -202,7 +232,6 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         elif sort_by == "name":
             results.sort(key=lambda r: r.get("name", "").lower())
 
-        # Serialize
         models = []
         for r in results[:limit]:
             models.append(
@@ -247,7 +276,6 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         except (ValueError, IndexError):
             return self._error("Invalid 'limit' parameter; expected integer.", 400)
 
-        # Forward to models endpoint with composite sort
         params["sort"] = ["composite"]
         params["limit"] = [str(limit)]
         self._handle_models(params)
@@ -305,29 +333,16 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_providers(self):
-        """Return provider availability plus canonical capability metadata."""
+        """Return provider availability plus global and REST-surface metadata."""
         availability = detect_available_providers()
         api_bases = get_provider_api_bases()
-        providers = []
-
-        for slug, capabilities in get_all_provider_capabilities().items():
-            providers.append(
-                {
-                    "name": slug,
-                    "display_name": capabilities.display_name,
-                    "available": availability.get(slug, False),
-                    "api_base": api_bases.get(slug, ""),
-                    "capabilities": {
-                        "searchable": capabilities.searchable,
-                        "detectable": capabilities.detectable,
-                        "lists_installed": capabilities.lists_installed,
-                        "downloadable": capabilities.downloadable,
-                        "paginated": capabilities.paginated,
-                    },
-                }
-            )
-
-        self._json_response({"providers": providers})
+        providers = build_provider_descriptors(availability, api_bases)
+        self._json_response(
+            {
+                "providers": providers,
+                "models_endpoint_providers": list(get_rest_model_provider_slugs()),
+            }
+        )
 
 
 def create_server(
@@ -368,6 +383,7 @@ def start_server_background(
 
 
 def run_smoke_check() -> int:
+    """Run a bounded API health check against an ephemeral local server."""
     server, thread = start_server_background(DEFAULT_HOST, 0)
     port = int(server.server_address[1])
 
@@ -386,6 +402,7 @@ def run_smoke_check() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run API smoke mode or start the configured REST server."""
     args = list(sys.argv[1:] if argv is None else argv)
     if smoke_mode_enabled():
         return run_smoke_check()
