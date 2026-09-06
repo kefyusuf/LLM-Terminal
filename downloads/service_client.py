@@ -12,7 +12,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only in lightweight envs
     psutil = None
 
-MIN_SERVICE_VERSION = "1.7"
+MIN_SERVICE_VERSION = "1.8"
 
 
 def service_base_url():
@@ -35,13 +35,17 @@ def _parse_version(version_str):
 
 
 def _request(method, path, payload=None, timeout=2.0):
-    """Send an HTTP request to the local download service and return parsed JSON.
+    """Send an HTTP request to the download service and return parsed JSON.
 
-    Raises any network or HTTP errors to the caller.
+    Adds the configured bearer token when present. Raises any network or HTTP
+    errors to the caller.
     """
     url = f"{service_base_url()}{path}"
     data = None
     headers = {"Content-Type": "application/json"}
+    token = config.settings.download_service_token
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
 
