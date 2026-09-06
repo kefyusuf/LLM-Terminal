@@ -6,6 +6,7 @@ from requests.exceptions import ConnectionError, RequestException, Timeout
 
 import config
 from core import cache_db
+from core.errors import ProviderError
 from core.http_client import get_session
 from core.scoring import enrich_result_with_scores
 from core.utils import (
@@ -59,17 +60,20 @@ class OllamaProvider:
         page: int = 0,
         **kwargs,
     ) -> SearchResult:
+        structured_errors: list[ProviderError] = []
         results, errors, has_more = search_ollama_models(
             query,
             specs,
             self.installed,
             page=page,
             page_size=limit,
+            _structured_error_sink=structured_errors.append,
         )
         return SearchResult(
             results=results,
             errors=errors,
             has_more_pages=has_more,
+            structured_errors=structured_errors,
         )
 
     def list_installed(self) -> list[str]:
@@ -264,7 +268,14 @@ def get_ollama_model_metadata(model_name):
     return metadata
 
 
-def search_ollama_models(query, specs, local_models, page=0, page_size=15):
+def search_ollama_models(
+    query,
+    specs,
+    local_models,
+    page=0,
+    page_size=15,
+    _structured_error_sink=None,
+):
     """Search the Ollama model registry for models matching *query*.
 
     Scrapes ``ollama.com/search``.  Returns
@@ -279,11 +290,34 @@ def search_ollama_models(query, specs, local_models, page=0, page_size=15):
         local_models: List of locally installed models.
         page: Page number (ignored).
         page_size: Results per page (used for slicing).
+        _structured_error_sink: Optional internal callback receiving ``ProviderError`` values.
     """
     results = []
     errors = []
     found_keys = set()
     html_text = ""
+
+    def _record_error(
+        message,
+        *,
+        code,
+        retryable=False,
+        status_code=None,
+        retry_after_seconds=None,
+    ):
+        """Append the legacy string and optionally emit a structured diagnostic."""
+        errors.append(message)
+        if _structured_error_sink is not None:
+            _structured_error_sink(
+                ProviderError(
+                    provider=OllamaProvider.slug,
+                    code=code,
+                    message=message,
+                    retryable=retryable,
+                    status_code=status_code,
+                    retry_after_seconds=retry_after_seconds,
+                )
+            )
 
     try:
         # Ollama doesn't support page-based pagination via URL
@@ -295,15 +329,34 @@ def search_ollama_models(query, specs, local_models, page=0, page_size=15):
         if response.status_code == 429:
             retry_after = _retry_after_from_response(response)
             if retry_after is not None:
-                errors.append(f"Ollama registry rate-limited (429). Retry in {retry_after}s.")
+                message = f"Ollama registry rate-limited (429). Retry in {retry_after}s."
             else:
-                errors.append("Ollama registry rate-limited (429). Retry shortly.")
+                message = "Ollama registry rate-limited (429). Retry shortly."
+            _record_error(
+                message,
+                code="rate_limited",
+                retryable=True,
+                status_code=429,
+                retry_after_seconds=float(retry_after) if retry_after is not None else None,
+            )
             return results, errors, False
         if response.status_code >= 500:
-            errors.append(f"Ollama registry unavailable (HTTP {response.status_code}).")
+            message = f"Ollama registry unavailable (HTTP {response.status_code})."
+            _record_error(
+                message,
+                code="http_error",
+                retryable=True,
+                status_code=response.status_code,
+            )
             return results, errors, False
         if response.status_code != 200:
-            errors.append(f"Ollama registry request failed (HTTP {response.status_code}).")
+            message = f"Ollama registry request failed (HTTP {response.status_code})."
+            _record_error(
+                message,
+                code="http_error",
+                retryable=False,
+                status_code=response.status_code,
+            )
             return results, errors, False
 
         html_text = response.text
@@ -379,13 +432,17 @@ def search_ollama_models(query, specs, local_models, page=0, page_size=15):
             enrich_result_with_scores(result_dict, specs)
             results.append(result_dict)
     except Timeout:
-        errors.append("Ollama registry request timed out.")
+        _record_error("Ollama registry request timed out.", code="timeout", retryable=True)
     except ConnectionError:
-        errors.append("Ollama registry unreachable. Check network connectivity.")
+        _record_error(
+            "Ollama registry unreachable. Check network connectivity.",
+            code="transport_error",
+            retryable=True,
+        )
     except RequestException as exc:
-        errors.append(f"Ollama search failed: {exc}")
+        _record_error(f"Ollama search failed: {exc}", code="transport_error", retryable=True)
     except (ValueError, AttributeError) as exc:
-        errors.append(f"Ollama parse failed: {exc}")
+        _record_error(f"Ollama parse failed: {exc}", code="parse_error", retryable=False)
 
     # Ollama returns all results at once (no page-offset support).
     # Keep the result cap for consistency, but never advertise a next page.
