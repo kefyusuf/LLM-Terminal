@@ -37,10 +37,26 @@ class LMStudioProvider(BaseProvider):
 
         Returns:
             A list of model dictionaries with name, publisher, and source populated.
+
+        Raises:
+            ValueError: If the response shape does not match the expected models payload.
         """
+        if not isinstance(data, dict):
+            raise ValueError("expected JSON object")
+
+        raw_models = data.get("data", [])
+        if not isinstance(raw_models, list):
+            raise ValueError("expected 'data' list")
+
         results: list[dict[str, Any]] = []
-        for model in data.get("data", []):
+        for model in raw_models:
+            if not isinstance(model, dict):
+                raise ValueError("expected model object")
+
             model_id = model.get("id", "")
+            if not isinstance(model_id, str):
+                raise ValueError("expected model id string")
+
             results.append(
                 {
                     "name": model_id,
@@ -102,6 +118,20 @@ class LMStudioProvider(BaseProvider):
                 )
 
             data = resp.json()
+            results = self._parse_models(data)
+        except (ValueError, TypeError, AttributeError) as exc:
+            message = f"LM Studio response parse failed: {exc}"
+            return SearchResult(
+                errors=[message],
+                structured_errors=[
+                    ProviderError(
+                        provider=self.slug,
+                        code="parse_error",
+                        message=message,
+                        retryable=False,
+                    )
+                ],
+            )
         except RequestException as exc:
             message = f"LM Studio search failed: {exc}"
             code = "timeout" if isinstance(exc, Timeout) else "transport_error"
@@ -116,8 +146,6 @@ class LMStudioProvider(BaseProvider):
                     )
                 ],
             )
-
-        results = self._parse_models(data)
 
         # Client-side filter
         q = query.lower()
