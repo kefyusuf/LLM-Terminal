@@ -214,7 +214,7 @@ def test_polymorphic_dispatch_returns_unified_shape():
         instance = provider_cls()
         if hasattr(instance, "_search_hf_models") or provider_cls.__name__ == "HuggingFaceProvider":
             with patch("providers.hf_provider.search_hf_models") as mock_fn:
-                mock_fn.return_value = ([], [])
+                mock_fn.return_value = ([], [], False)
                 result = instance.search("x", _fake_specs(), limit=5)
         elif provider_cls.__name__ == "OllamaProvider":
             with patch("providers.ollama_provider.search_ollama_models") as mock_fn:

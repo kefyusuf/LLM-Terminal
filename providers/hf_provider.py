@@ -57,7 +57,7 @@ class HuggingFaceProvider:
             SearchResult: Matching models, any search errors, and pagination information.
         """
         offset = page * limit
-        response = search_hf_models(
+        results, errors, has_more_pages = search_hf_models(
             query,
             specs,
             self.model_info_cache,
@@ -67,13 +67,6 @@ class HuggingFaceProvider:
             lookahead=1,
             return_page_info=True,
         )
-        if len(response) == 3:
-            results, errors, has_more_pages = response
-        else:
-            # Backward-compatible fallback for patched/test doubles that still
-            # return the historical two-item tuple.
-            results, errors = response
-            has_more_pages = len(results) > limit
         return SearchResult(
             results=results[:limit],
             errors=list(errors),
