@@ -36,12 +36,12 @@ class _StateStub:
         return []
 
 
-def test_non_loopback_bind_requires_token(monkeypatch):
-    """Remote download-service binds must fail closed when no token is configured."""
+def test_non_loopback_bind_is_rejected_without_tls(monkeypatch):
+    """Remote binds must remain disabled until authenticated TLS transport exists."""
     monkeypatch.setattr(config.settings, "download_service_host", "0.0.0.0")
-    monkeypatch.setattr(config.settings, "download_service_token", None)
+    monkeypatch.setattr(config.settings, "download_service_token", "secret-token")
 
-    with pytest.raises(RuntimeError, match="AIMODEL_DOWNLOAD_SERVICE_TOKEN"):
+    with pytest.raises(RuntimeError, match="authenticated TLS transport"):
         download_service.validate_service_auth_boundary()
 
 
@@ -51,6 +51,25 @@ def test_loopback_bind_remains_token_optional(monkeypatch):
     monkeypatch.setattr(config.settings, "download_service_token", None)
 
     download_service.validate_service_auth_boundary()
+
+
+def test_service_client_rejects_non_loopback_plaintext_target(monkeypatch):
+    """The client must reject remote HTTP targets before constructing a request."""
+    called = False
+
+    def fake_urlopen(request, timeout):
+        """Record any unexpected network attempt."""
+        nonlocal called
+        called = True
+        raise AssertionError("urlopen must not be called for non-loopback HTTP")
+
+    monkeypatch.setattr(config.settings, "download_service_host", "192.0.2.10")
+    monkeypatch.setattr(config.settings, "download_service_token", "secret-token")
+    monkeypatch.setattr(service_client, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="authenticated TLS transport"):
+        service_client.get_service_health(timeout=1.25)
+    assert called is False
 
 
 def test_service_client_forwards_configured_bearer_token(monkeypatch):
@@ -78,6 +97,7 @@ def test_service_client_forwards_configured_bearer_token(monkeypatch):
         captured["timeout"] = timeout
         return _ResponseStub()
 
+    monkeypatch.setattr(config.settings, "download_service_host", "127.0.0.1")
     monkeypatch.setattr(config.settings, "download_service_token", "secret-token")
     monkeypatch.setattr(service_client, "urlopen", fake_urlopen)
 
