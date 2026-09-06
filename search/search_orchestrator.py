@@ -141,6 +141,7 @@ class SearchOrchestrator:
         hf_errors: list[str] = []
         extra_results: list[dict] = []
         extra_errors: list[str] = []
+        provider_page_flags: dict[str, bool] = {}
 
         def _cancelled_outcome() -> SearchOutcome:
             partial_results = ollama_results + hf_results + extra_results
@@ -218,6 +219,7 @@ class SearchOrchestrator:
                             extra_errors.append(f"{label} search failed")
                         continue
 
+                    provider_page_flags[label] = result.has_more_pages
                     if label == "ollama":
                         ollama_results = result.results
                         ollama_errors = result.errors
@@ -235,12 +237,10 @@ class SearchOrchestrator:
 
         results = ollama_results + hf_results + extra_results
         errors = ollama_errors + hf_errors + extra_errors
-        has_more_pages = has_more_pages_for_results(
-            providers,
-            hf_result_count=len(hf_results),
-            ollama_result_count=len(ollama_results),
-            page_size=page_size,
+        provider_has_more_pages = (
+            provider_page_flags.get(providers[0], False) if len(providers) == 1 else False
         )
+        has_more_pages = has_more_pages_for_results(providers, provider_has_more_pages)
         result_count = len(results)
 
         return SearchOutcome(
