@@ -11,6 +11,7 @@ import platform
 from pathlib import Path
 from typing import Any
 
+from core.errors import ProviderError
 from core.scoring import enrich_result_with_scores
 from core.utils import (
     calculate_fit,
@@ -65,12 +66,28 @@ class MLXProvider(BaseProvider):
         """Search locally cached MLX models."""
         results: list[dict[str, Any]] = []
         errors: list[str] = []
+        structured_errors: list[ProviderError] = []
 
         for cache_path in _MLX_CACHE_PATHS:
             if not cache_path.exists():
                 continue
 
-            for model_dir in cache_path.iterdir():
+            try:
+                model_dirs = list(cache_path.iterdir())
+            except OSError as exc:
+                message = f"MLX cache scan failed for {cache_path}: {exc}"
+                errors.append(message)
+                structured_errors.append(
+                    ProviderError(
+                        provider=self.slug,
+                        code="io_error",
+                        message=message,
+                        retryable=False,
+                    )
+                )
+                continue
+
+            for model_dir in model_dirs:
                 if not model_dir.is_dir():
                     continue
 
@@ -126,7 +143,12 @@ class MLXProvider(BaseProvider):
                 if len(results) >= limit:
                     break
 
-        return SearchResult(results=results, errors=errors, has_more_pages=len(results) > limit)
+        return SearchResult(
+            results=results,
+            errors=errors,
+            has_more_pages=len(results) > limit,
+            structured_errors=structured_errors,
+        )
 
     def list_installed(self) -> list[str]:
         """List locally cached MLX models."""
