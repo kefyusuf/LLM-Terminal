@@ -32,6 +32,7 @@ from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 
+from core.errors import ProviderError
 from providers import SearchResult, get_all_provider_classes
 from search.search_orchestration import has_more_pages_for_results
 
@@ -56,6 +57,9 @@ class SearchOutcome:
             providers returned. The orchestrator still returns a
             partial :class:`SearchOutcome`; the caller decides
             whether to apply it.
+        structured_errors: Machine-readable provider diagnostics preserved
+            from completed provider results. This field is additive; legacy
+            UI callers may continue using :attr:`errors` only.
     """
 
     results: list[dict] = field(default_factory=list)
@@ -64,6 +68,7 @@ class SearchOutcome:
     result_count: int = 0
     providers: list[str] = field(default_factory=list)
     cancelled: bool = False
+    structured_errors: list[ProviderError] = field(default_factory=list)
 
 
 class SearchOrchestrator:
@@ -137,10 +142,13 @@ class SearchOrchestrator:
 
         ollama_results: list[dict] = []
         ollama_errors: list[str] = []
+        ollama_structured_errors: list[ProviderError] = []
         hf_results: list[dict] = []
         hf_errors: list[str] = []
+        hf_structured_errors: list[ProviderError] = []
         extra_results: list[dict] = []
         extra_errors: list[str] = []
+        extra_structured_errors: list[ProviderError] = []
         provider_page_flags: dict[str, bool] = {}
 
         def _cancelled_outcome() -> SearchOutcome:
@@ -151,6 +159,11 @@ class SearchOrchestrator:
                 result_count=len(partial_results),
                 providers=list(providers),
                 cancelled=True,
+                structured_errors=(
+                    ollama_structured_errors
+                    + hf_structured_errors
+                    + extra_structured_errors
+                ),
             )
 
         def _search_ollama():
@@ -223,12 +236,15 @@ class SearchOrchestrator:
                     if label == "ollama":
                         ollama_results = result.results
                         ollama_errors = result.errors
+                        ollama_structured_errors = result.structured_errors
                     elif label == "huggingface":
                         hf_results = result.results
                         hf_errors = result.errors
+                        hf_structured_errors = result.structured_errors
                     else:
                         extra_results.extend(result.results)
                         extra_errors.extend(result.errors)
+                        extra_structured_errors.extend(result.structured_errors)
         finally:
             pool.shutdown(wait=wait_for_workers, cancel_futures=not wait_for_workers)
 
@@ -237,6 +253,9 @@ class SearchOrchestrator:
 
         results = ollama_results + hf_results + extra_results
         errors = ollama_errors + hf_errors + extra_errors
+        structured_errors = (
+            ollama_structured_errors + hf_structured_errors + extra_structured_errors
+        )
         provider_has_more_pages = (
             provider_page_flags.get(providers[0], False) if len(providers) == 1 else False
         )
@@ -249,4 +268,5 @@ class SearchOrchestrator:
             has_more_pages=has_more_pages,
             result_count=result_count,
             providers=list(providers),
+            structured_errors=structured_errors,
         )
