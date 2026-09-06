@@ -1,3 +1,5 @@
+import time
+
 from huggingface_hub import HfApi
 from huggingface_hub.errors import HfHubHTTPError
 from requests.exceptions import RequestException
@@ -16,6 +18,10 @@ from core.utils import (
 )
 from providers.base import SearchResult
 from providers.capabilities import get_provider_capabilities
+
+_HF_MAX_ATTEMPTS = 3
+_HF_BACKOFF_BASE_SECONDS = 0.5
+_HF_BACKOFF_MAX_SECONDS = 4.0
 
 
 class HuggingFaceProvider:
@@ -153,6 +159,41 @@ def _format_hf_http_error(exc):
     return f"Hugging Face request failed: {exc}"
 
 
+def _is_retryable_hf_http_error(exc):
+    """Return whether a Hugging Face HTTP error is transient and safe to retry."""
+    status = _get_status_code(exc)
+    return status == 429 or (status is not None and 500 <= status <= 599)
+
+
+def _hf_retry_delay_seconds(exc, attempt):
+    """Return Retry-After or bounded exponential delay before the next attempt."""
+    if isinstance(exc, HfHubHTTPError):
+        retry_after = _get_retry_after_seconds(exc)
+        if retry_after is not None:
+            return max(float(retry_after), 0.0)
+    return min(
+        _HF_BACKOFF_BASE_SECONDS * (2 ** max(attempt - 1, 0)),
+        _HF_BACKOFF_MAX_SECONDS,
+    )
+
+
+def _list_hf_models_with_retry(api, **kwargs):
+    """List Hugging Face models with bounded retries for transient failures only."""
+    for attempt in range(1, _HF_MAX_ATTEMPTS + 1):
+        try:
+            return list(api.list_models(**kwargs))
+        except HfHubHTTPError as exc:
+            if attempt >= _HF_MAX_ATTEMPTS or not _is_retryable_hf_http_error(exc):
+                raise
+            time.sleep(_hf_retry_delay_seconds(exc, attempt))
+        except RequestException as exc:
+            if attempt >= _HF_MAX_ATTEMPTS:
+                raise
+            time.sleep(_hf_retry_delay_seconds(exc, attempt))
+
+    raise RuntimeError("Hugging Face retry loop exhausted unexpectedly")
+
+
 def search_hf_models(
     query,
     specs,
@@ -202,14 +243,15 @@ def search_hf_models(
 
     try:
         api = HfApi(token=hf_token) if hf_token else HfApi()
-        hf_models_iter = api.list_models(
+        raw_models = _list_hf_models_with_retry(
+            api,
             search=query,
             sort="downloads",
             limit=offset + window_size,
             filter="gguf",
             expand=["likes", "siblings", "downloads"],
         )
-        raw_window = list(hf_models_iter)[offset : offset + window_size]
+        raw_window = raw_models[offset : offset + window_size]
     except HfHubHTTPError as exc:
         errors.append(_format_hf_http_error(exc))
         return _return()
