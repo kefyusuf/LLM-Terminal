@@ -128,6 +128,9 @@ python -m api_server --port 9000  # Custom port
 |---|---|---|
 | `AIMODEL_HF_TOKEN` | - | Canonical Hugging Face read-only token setting; standard `HF_TOKEN` is accepted as a fallback |
 | `AIMODEL_HF_MODELS_DIR` | OS-specific user-data `models/` directory | Hugging Face GGUF download directory |
+| `AIMODEL_DOWNLOAD_SERVICE_HOST` | `127.0.0.1` | Download-service bind/client host; non-loopback values require `AIMODEL_DOWNLOAD_SERVICE_TOKEN` |
+| `AIMODEL_DOWNLOAD_SERVICE_PORT` | `8765` | Download-service bind/client port |
+| `AIMODEL_DOWNLOAD_SERVICE_TOKEN` | - | Bearer token protecting download-service endpoints except `/health`; required for non-loopback binds |
 | `AIMODEL_DOWNLOAD_MAX_WORKERS` | 2 | Parallel download worker count |
 | `AIMODEL_HF_SEARCH_LIMIT` | 15 | HF results per page |
 | `AIMODEL_HF_SEARCH_MAX_PAGES` | 10 | Max HF pages |
@@ -143,6 +146,8 @@ python -m api_server --port 9000  # Custom port
 AIMODEL_HF_TOKEN=hf_your_token_here
 # HF_TOKEN=hf_your_token_here  # Supported fallback for Hugging Face tooling compatibility
 # AIMODEL_HF_MODELS_DIR=/custom/path/models
+# AIMODEL_DOWNLOAD_SERVICE_HOST=0.0.0.0
+# AIMODEL_DOWNLOAD_SERVICE_TOKEN=replace-with-a-long-random-secret
 AIMODEL_UI_MODE=compact
 AIMODEL_THEME=nord
 ```
@@ -217,5 +222,6 @@ Where efficiency depends on inference mode: GPU (0.55), GPU+CPU offload (0.30), 
 - `terminal_ui/` now exists mainly for theme/style assets; the legacy experimental UI remains isolated there.
 - Download service data and metadata cache are stored in the OS-specific per-user application data directory by default; `AIMODEL_DOWNLOAD_DB_PATH` and `AIMODEL_CACHE_DB_PATH` can override those paths.
 - Hugging Face GGUF files are stored in the same per-user application data directory under `models/` by default; `AIMODEL_HF_MODELS_DIR` can override the destination.
+- Download service binds to loopback by default. Binding it to `0.0.0.0`, a LAN address, or another non-loopback host requires `AIMODEL_DOWNLOAD_SERVICE_TOKEN`; startup fails closed without one. `/health` stays public for probes, while job, debug, cancellation, deletion, and shutdown endpoints require the bearer token when configured.
 - REST API binds to `127.0.0.1:8787` by default (localhost only).
 - Provider auto-detection runs at startup; unavailable providers are silently skipped.
