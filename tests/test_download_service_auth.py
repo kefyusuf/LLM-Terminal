@@ -73,7 +73,7 @@ def test_service_client_rejects_non_loopback_plaintext_target(monkeypatch):
 
 
 def test_service_client_forwards_configured_bearer_token(monkeypatch):
-    """The shared client request helper must attach the configured bearer token."""
+    """The client must authenticate only the initial service request."""
     captured = {}
 
     class _ResponseStub:
@@ -92,8 +92,10 @@ def test_service_client_forwards_configured_bearer_token(monkeypatch):
             return b'{"ok": true}'
 
     def fake_open(request, timeout):
-        """Capture the outbound Authorization header."""
+        """Capture initial-request and redirectable Authorization state."""
         captured["authorization"] = request.get_header("Authorization")
+        captured["unredirected"] = request.unredirected_hdrs.get("Authorization")
+        captured["redirectable"] = request.headers.get("Authorization")
         captured["timeout"] = timeout
         return _ResponseStub()
 
@@ -102,7 +104,12 @@ def test_service_client_forwards_configured_bearer_token(monkeypatch):
     monkeypatch.setattr(service_client._NO_PROXY_OPENER, "open", fake_open)
 
     assert service_client.get_service_health(timeout=1.25) == {"ok": True}
-    assert captured == {"authorization": "Bearer secret-token", "timeout": 1.25}
+    assert captured == {
+        "authorization": "Bearer secret-token",
+        "unredirected": "Bearer secret-token",
+        "redirectable": None,
+        "timeout": 1.25,
+    }
 
 
 def test_service_client_formats_ipv6_loopback_url(monkeypatch):
