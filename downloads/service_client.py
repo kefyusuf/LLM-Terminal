@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 import config
 
@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover - exercised only in lightweight envs
     psutil = None
 
 MIN_SERVICE_VERSION = "1.8"
+_NO_PROXY_OPENER = build_opener(ProxyHandler({}))
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -27,6 +28,18 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def _url_host(host: str) -> str:
+    """Return a URL-safe host, bracketing IPv6 literals when required."""
+    normalized = str(host).strip()
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return normalized
+    if address.version == 6:
+        return f"[{normalized}]"
+    return normalized
+
+
 def service_base_url():
     """Return the configured loopback-only download-service base URL."""
     host = config.settings.download_service_host
@@ -35,7 +48,7 @@ def service_base_url():
         raise RuntimeError(
             "Non-loopback download-service clients are disabled until authenticated TLS transport is supported"
         )
-    return f"http://{host}:{port}"
+    return f"http://{_url_host(host)}:{port}"
 
 
 def _parse_version(version_str):
@@ -51,11 +64,11 @@ def _parse_version(version_str):
 
 
 def _request(method, path, payload=None, timeout=2.0):
-    """Send an HTTP request to the loopback download service and return parsed JSON.
+    """Send an HTTP request directly to the loopback download service.
 
-    Adds the configured bearer token when present. Raises any network or HTTP
-    errors to the caller. Non-loopback plaintext targets are rejected before
-    request construction.
+    Adds the configured bearer token when present. Non-loopback plaintext targets
+    are rejected before request construction, and environment proxy settings are
+    bypassed so loopback credentials cannot be forwarded to a proxy.
     """
     url = f"{service_base_url()}{path}"
     data = None
@@ -67,7 +80,7 @@ def _request(method, path, payload=None, timeout=2.0):
         data = json.dumps(payload).encode("utf-8")
 
     req = Request(url=url, data=data, method=method, headers=headers)
-    with urlopen(req, timeout=timeout) as response:
+    with _NO_PROXY_OPENER.open(req, timeout=timeout) as response:
         body = response.read().decode("utf-8")
         if not body:
             return {}
