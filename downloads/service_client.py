@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import subprocess
 import sys
@@ -15,10 +16,25 @@ except ImportError:  # pragma: no cover - exercised only in lightweight envs
 MIN_SERVICE_VERSION = "1.8"
 
 
+def _is_loopback_host(host: str) -> bool:
+    """Return whether *host* is an explicit loopback address or localhost."""
+    normalized = str(host).strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
 def service_base_url():
-    """Return the configured download-service base URL."""
+    """Return the configured loopback-only download-service base URL."""
     host = config.settings.download_service_host
     port = config.settings.download_service_port
+    if not _is_loopback_host(host):
+        raise RuntimeError(
+            "Non-loopback download-service clients are disabled until authenticated TLS transport is supported"
+        )
     return f"http://{host}:{port}"
 
 
@@ -35,10 +51,11 @@ def _parse_version(version_str):
 
 
 def _request(method, path, payload=None, timeout=2.0):
-    """Send an HTTP request to the download service and return parsed JSON.
+    """Send an HTTP request to the loopback download service and return parsed JSON.
 
     Adds the configured bearer token when present. Raises any network or HTTP
-    errors to the caller.
+    errors to the caller. Non-loopback plaintext targets are rejected before
+    request construction.
     """
     url = f"{service_base_url()}{path}"
     data = None
@@ -62,7 +79,7 @@ def is_service_running():
     try:
         data = _request("GET", "/health", timeout=1.0)
         return bool(data.get("ok"))
-    except (URLError, HTTPError, TimeoutError, ValueError):
+    except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
         return False
 
 
@@ -109,7 +126,7 @@ def _wait_for_service(deadline_seconds=6.0):
             health = get_service_health()
             if health.get("ok") and is_service_compatible(health):
                 return True
-        except (URLError, HTTPError, TimeoutError, ValueError):
+        except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
             pass
         time.sleep(0.2)
     return False
@@ -128,7 +145,7 @@ def stop_service():
     try:
         _request("POST", "/shutdown", payload={}, timeout=1.0)
         stopped_any = True
-    except (URLError, HTTPError, TimeoutError, ValueError):
+    except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
         pass
 
     if psutil is not None:
@@ -164,7 +181,7 @@ def ensure_service_running():
             if is_service_compatible(health):
                 return True
             stop_service()
-        except (URLError, HTTPError, TimeoutError, ValueError):
+        except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
             stop_service()
 
     _start_service_process()
