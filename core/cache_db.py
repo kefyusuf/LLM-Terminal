@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 _cache_db_path: Path | None = None
 _init_lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
-_conn_lock = threading.Lock()
+_db_lock = threading.RLock()
 
 
 def get_cache_db_path() -> Path:
@@ -26,10 +26,11 @@ _conn_path: str | None = None
 
 
 def _get_conn() -> sqlite3.Connection:
+    """Return the shared cache connection, reopening it when the configured path changes."""
     global _conn, _conn_path
     current_path = str(Path(get_cache_db_path()))
     if _conn is None or _conn_path != current_path:
-        with _conn_lock:
+        with _db_lock:
             if _conn is None or _conn_path != current_path:
                 if _conn is not None:
                     _conn.close()
@@ -41,8 +42,9 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def _close_conn():
+    """Close and clear the shared cache connection under the database lock."""
     global _conn, _conn_path
-    with _conn_lock:
+    with _db_lock:
         if _conn is not None:
             _conn.close()
             _conn = None
@@ -58,21 +60,26 @@ def _connect():
 
 
 def _execute(sql: str, params=()):
-    """Execute a query on the pooled connection, reconnecting on error."""
-    try:
-        cur = _get_conn().execute(sql, params)
-        _get_conn().commit()
-        return cur
-    except sqlite3.Error:
-        _close_conn()
-        cur = _get_conn().execute(sql, params)
-        _get_conn().commit()
-        return cur
+    """Execute and commit one query while serializing access to the shared connection."""
+    with _db_lock:
+        try:
+            conn = _get_conn()
+            cur = conn.execute(sql, params)
+            conn.commit()
+            return cur
+        except sqlite3.Error:
+            _close_conn()
+            conn = _get_conn()
+            cur = conn.execute(sql, params)
+            conn.commit()
+            return cur
 
 
 def init_db():
-    with _init_lock:
-        _get_conn().execute(
+    """Create cache tables once while serializing schema work with normal queries."""
+    with _init_lock, _db_lock:
+        conn = _get_conn()
+        conn.execute(
             """
                 CREATE TABLE IF NOT EXISTS model_cache (
                     source TEXT NOT NULL,
@@ -83,7 +90,7 @@ def init_db():
                 )
                 """
         )
-        _get_conn().execute(
+        conn.execute(
             """
                 CREATE TABLE IF NOT EXISTS hardware_snapshot (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -92,6 +99,7 @@ def init_db():
                 )
                 """
         )
+        conn.commit()
 
 
 def get_model_cache(source: str, model_id: str) -> dict | None:
