@@ -81,7 +81,7 @@ class LMStudioProvider(BaseProvider):
             if resp.status_code != 200:
                 message = f"LM Studio API returned status {resp.status_code}"
                 status_code = resp.status_code
-                retryable = status_code == 429 or status_code >= 500
+                retryable = status_code == 429 or 500 <= status_code <= 599
                 code = "rate_limited" if status_code == 429 else "http_error"
                 retry_after = None
                 if status_code == 429:
