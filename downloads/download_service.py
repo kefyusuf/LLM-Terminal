@@ -65,15 +65,12 @@ def _is_loopback_host(host: str) -> bool:
 
 
 def validate_service_auth_boundary() -> None:
-    """Require a bearer token before allowing a non-loopback service bind."""
+    """Reject non-loopback binds until authenticated TLS transport is supported."""
     host, _ = service_bind_address()
     if _is_loopback_host(host):
         return
-    if config.settings.download_service_token:
-        return
     raise RuntimeError(
-        "AIMODEL_DOWNLOAD_SERVICE_TOKEN is required when "
-        "AIMODEL_DOWNLOAD_SERVICE_HOST is not loopback"
+        "Non-loopback download-service binds are disabled until authenticated TLS transport is supported"
     )
 
 
