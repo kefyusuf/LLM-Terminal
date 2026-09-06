@@ -37,6 +37,39 @@ class DockerProvider(BaseProvider):
     def __init__(self):
         self.host = os.environ.get("DOCKER_MODEL_RUNNER_HOST", self.default_host)
 
+    @staticmethod
+    def _parse_model_ids(data: Any) -> list[str]:
+        """Validate a Docker Model Runner response and return model identifiers."""
+        if isinstance(data, list):
+            models = data
+        elif isinstance(data, dict):
+            if "models" in data:
+                models = data["models"]
+            elif "data" in data:
+                models = data["data"]
+            else:
+                models = []
+        else:
+            raise ValueError("expected response to be a list or object")
+
+        if not isinstance(models, list):
+            raise ValueError("expected model collection to be a list")
+
+        model_ids: list[str] = []
+        for model in models:
+            if isinstance(model, str):
+                model_id = model
+            elif isinstance(model, dict):
+                model_id = model.get("id", model.get("name", ""))
+            else:
+                raise ValueError("expected model entry to be a string or object")
+
+            if not isinstance(model_id, str):
+                raise ValueError("expected model id or name to be a string")
+            model_ids.append(model_id)
+
+        return model_ids
+
     def detect(self) -> bool:
         """Check if Docker Model Runner is available."""
         try:
@@ -83,16 +116,25 @@ class DockerProvider(BaseProvider):
                     ],
                 )
 
-            data = resp.json()
-            # Docker Model Runner returns a list or {"models": [...]}
-            models = data if isinstance(data, list) else data.get("models", data.get("data", []))
+            try:
+                model_ids = self._parse_model_ids(resp.json())
+            except (ValueError, TypeError, AttributeError) as exc:
+                message = f"Docker Model Runner response parse failed: {exc}"
+                errors.append(message)
+                return SearchResult(
+                    results=results,
+                    errors=errors,
+                    structured_errors=[
+                        ProviderError(
+                            provider=self.slug,
+                            code="parse_error",
+                            message=message,
+                            retryable=False,
+                        )
+                    ],
+                )
 
-            for model in models:
-                if isinstance(model, str):
-                    model_id = model
-                else:
-                    model_id = model.get("id", model.get("name", ""))
-
+            for model_id in model_ids:
                 if not model_id:
                     continue
                 if query and query != "*" and query.lower() not in model_id.lower():
