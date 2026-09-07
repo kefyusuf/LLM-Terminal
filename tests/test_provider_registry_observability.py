@@ -39,9 +39,11 @@ def test_import_error_is_contained_and_warned():
 
 
 def test_unexpected_lazy_import_exception_propagates():
-    with patch("providers._get_mlx_provider", side_effect=RuntimeError("programming bug")):
-        with pytest.raises(RuntimeError, match="programming bug"):
-            providers.get_all_provider_classes()
+    with (
+        patch("providers._get_mlx_provider", side_effect=RuntimeError("programming bug")),
+        pytest.raises(RuntimeError, match="programming bug"),
+    ):
+        providers.get_all_provider_classes()
 
 
 def test_unexpected_detection_failure_is_fail_closed_and_warned():
