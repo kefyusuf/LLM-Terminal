@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from loguru import logger
 
 import config
+from core.errors import ProviderError
 from core.hardware import HardwareMonitor
 from core.model_intelligence import plan_hardware_for_model
 from core.scoring import score_model
@@ -60,6 +61,18 @@ def get_provider_api_bases() -> dict[str, str]:
 def get_rest_model_provider_slugs() -> tuple[str, ...]:
     """Return provider slugs directly supported by the REST models endpoint."""
     return REST_MODEL_PROVIDER_SLUGS
+
+
+def serialize_provider_error(error: ProviderError) -> dict:
+    """Serialize one structured provider diagnostic for REST responses."""
+    return {
+        "provider": error.provider,
+        "code": error.code,
+        "message": error.message,
+        "retryable": error.retryable,
+        "status_code": error.status_code,
+        "retry_after_seconds": error.retry_after_seconds,
+    }
 
 
 def build_provider_descriptors(
@@ -201,24 +214,33 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
 
         specs = self.monitor.get_specs()
         results = []
+        errors: list[str] = []
+        structured_errors: list[ProviderError] = []
 
         # Search providers
         if provider in ("all", "ollama"):
             local = get_installed_ollama_models()
-            ollama_results, _, _ = search_ollama_models(
-                query or "*", specs, local, page_size=limit
+            ollama_results, ollama_errors, _ = search_ollama_models(
+                query or "*",
+                specs,
+                local,
+                page_size=limit,
+                _structured_error_sink=structured_errors.append,
             )
             results.extend(ollama_results)
+            errors.extend(ollama_errors)
 
         if provider in ("all", "huggingface"):
-            hf_results, _ = search_hf_models(
+            hf_results, hf_errors = search_hf_models(
                 query or "*",
                 specs,
                 {},
                 limit=limit,
                 hf_token=config.settings.hf_token,
+                _structured_error_sink=structured_errors.append,
             )
             results.extend(hf_results)
+            errors.extend(hf_errors)
 
         # Filter
         if use_case != "all":
@@ -272,6 +294,10 @@ class ModelAPIHandler(BaseHTTPRequestHandler):
                 "total": len(models),
                 "query": query,
                 "provider": provider,
+                "errors": errors,
+                "structured_errors": [
+                    serialize_provider_error(error) for error in structured_errors
+                ],
             }
         )
 
