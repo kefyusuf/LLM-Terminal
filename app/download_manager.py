@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.error import HTTPError
 
-from downloads import service_client
+import downloads.service_client as service_client
 from downloads.download_history import (
     action_label_for_entry,
 )
