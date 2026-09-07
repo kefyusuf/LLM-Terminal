@@ -98,9 +98,10 @@ Result refresh still uses `DataTable.clear()` in normal/structural refresh paths
 
 Broad catches are no longer the system-wide default, but some best-effort paths still use them, for example:
 
-- provider-selector widget synchronization fallback,
 - remaining download action fallbacks outside periodic polling and `DownloadManager.sync_jobs()`,
 - platform hardware probes.
+
+Provider-selector widget synchronization is now an explicitly bounded best-effort path: a temporarily absent Textual selector (`NoMatches`) is contained so provider state/search can continue during lifecycle transitions, while wrong-type/value/programming failures are no longer swallowed.
 
 Provider registry lazy imports and detection are no longer silent suppression paths: expected missing imports are contained with warnings, unexpected import-time programming failures propagate, unexpected optional-provider construction/detection failures fail closed with warnings, and built-in Ollama/Hugging Face fallback availability is preserved when their dynamic detection raises unexpectedly.
 
@@ -202,6 +203,7 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **Sequential provider search:** resolved by `SearchOrchestrator` parallel fan-out.
 - **No search cancellation:** resolved by orchestrator cancellation polling/UI search IDs.
 - **Provider registry silent suppression:** lazy imports now contain only expected `ImportError` with warnings; unexpected import-time programming failures propagate, and unexpected optional-provider detection failures fail closed with warnings.
+- **Provider-selector broad synchronization catch:** narrowed to expected Textual `NoMatches`; other synchronization failures propagate.
 - **SQLite connection per operation:** resolved for metadata cache by shared locked connection.
 - **Download service single worker:** resolved by bounded configurable worker pool.
 - **Duplicate model-size estimator:** `core.utils` delegates to canonical MoE-aware estimator.
