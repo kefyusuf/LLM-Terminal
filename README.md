@@ -130,7 +130,7 @@ Use a supported Python 3.10-3.14 interpreter for bootstrap. On Windows that can 
 
 `scripts/dev.py verify` runs the required local checks: pytest, import smoke and Ruff.
 
-`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 lane now measures **65.38% total coverage** (`5043` statements, `1746` missed) and enforces a **55%** merge floor. Focused fake-process/state tests raised `downloads/runner.py` from **24% to 90%** without changing production behavior. The remaining planned aggregate ratchet is 60%, reached through additional high-risk tests rather than coverage exclusions.
+`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 lane now measures **66.59% total coverage** (`5043` statements, `1685` missed) and enforces a **60%** merge floor. Focused deterministic tests raised `downloads/runner.py` from **24% to 90%** and `downloads/service_client.py` from **46% to 90%** without changing production behavior. The staged 50% → 55% → 60% coverage ratchet is complete; future increases should remain evidence-driven and must not rely on production-code exclusions.
 
 `scripts/dev.py smoke` runs bounded/offline-safe smoke checks for the CLI, REST API, TUI startup path and download service.
 
@@ -272,11 +272,11 @@ The active post-hardening roadmap is in `.planning/roadmap.md`.
 
 Current priorities:
 
-1. ratchet the enforced coverage floor from 55% to 60% with focused high-risk tests,
-2. residual silent-failure audit,
-3. Ollama registry parser resilience and structured-source research,
-4. safer incremental TUI DataTable updates,
-5. explicit Windows/WSL/Linux/macOS Apple Silicon acceptance matrix.
+1. residual silent-failure audit,
+2. Ollama registry parser resilience and structured-source research,
+3. safer incremental TUI DataTable updates,
+4. explicit Windows/WSL/Linux/macOS Apple Silicon acceptance matrix,
+5. targeted tests for consequential weak modules as concrete changes require them.
 
 Documentation maintenance rules are in `docs/maintenance.md`.
 
