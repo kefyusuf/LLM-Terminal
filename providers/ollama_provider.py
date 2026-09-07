@@ -374,14 +374,14 @@ def search_ollama_models(
                 continue
             found_keys.add(unique_key)
 
-            full_text = anchor.get_text(strip=True)
+            full_text = anchor.get_text(" ", strip=True)
             pulls = re.search(r"(\d+(?:\.\d+)?[KM]?)\s*Pulls", full_text, re.IGNORECASE)
             if not pulls:
                 parent = anchor.find_parent("li")
                 if parent:
                     pulls = re.search(
                         r"(\d+(?:\.\d+)?[KM]?)\s*Pulls",
-                        parent.get_text(strip=True),
+                        parent.get_text(" ", strip=True),
                         re.IGNORECASE,
                     )
 
