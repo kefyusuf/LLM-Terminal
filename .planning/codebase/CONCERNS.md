@@ -22,13 +22,14 @@ Remote Ollama discovery still fetches `ollama.com/search`/library HTML and parse
 **Current mitigation:**
 
 - retry/backoff and provider diagnostics exist,
-- parsing has helper coverage.
+- sanitized fixture-backed contracts pin the currently supported search-anchor and model-detail table/card shapes,
+- deterministic tests cover ordering, dedupe, ignored links, direct/parent pull counts, GB/MB size parsing, preferred variants, and empty/unsupported HTML,
+- nested pull-count text boundaries are regression-covered after the #86 correction.
 
 **Next work:**
 
-1. fixture-backed parser contracts for supported shapes,
-2. structural-failure detection/diagnostics,
-3. research a supported structured registry/search source before considering migration.
+1. structural-failure detection/diagnostics that distinguish a genuine zero-result page from an unsupported page shape where evidence allows,
+2. research a supported structured registry/search source before considering migration.
 
 ### 2. Aggregate coverage is healthy but uneven across high-risk modules
 
