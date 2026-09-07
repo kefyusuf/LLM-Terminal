@@ -100,10 +100,10 @@ Broad catches are no longer the system-wide default, but some best-effort paths 
 
 - provider registry import/detection suppression,
 - provider-selector widget synchronization fallback,
-- remaining download sync/action update boundaries such as `DownloadManager.sync_jobs()`,
+- remaining download action fallbacks outside periodic polling and `DownloadManager.sync_jobs()`,
 - platform hardware probes.
 
-Periodic timer-driven download polling is no longer a silent broad-catch path: expected service failures preserve the last known state and surface deduplicated stale/recovery status, while unexpected programming failures propagate.
+Periodic timer-driven download polling and action-triggered `DownloadManager.sync_jobs()` are no longer silent broad-catch paths: expected service failures preserve last-known state and surface a diagnostic, while unexpected programming failures propagate.
 
 **Risk:** a broad catch can become a silent false-success path if its context changes.
 
