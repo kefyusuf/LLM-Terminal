@@ -10,8 +10,6 @@ import sys
 from io import StringIO
 from types import SimpleNamespace
 
-import pytest
-
 from downloads import runner
 
 
