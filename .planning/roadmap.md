@@ -1,130 +1,173 @@
-# AI Model Explorer — Roadmap
+# AI Model Explorer — Active Roadmap
 
-**Oluşturma:** 2026-06-09
-**Kaynak:** `.planning/codebase/` (gsd-codebase-mapper analizi)
+**Baseline date:** 2026-09-07  
+**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`  
+**Status:** post-hardening baseline; active roadmap only
 
----
+This roadmap replaces the 2026-06-09 mapper plan. Completed work stays documented here only as a baseline summary; it is not an active backlog.
 
-## Faz 1: Temel Sağlık & Bakım
-*Düşük risk, yüksek etki — tüm fazların temeli.*
+## Delivery Principles
 
-| # | Görev | Dosyalar | Süre |
-|---|-------|----------|------|
-| 1.1 | `except Exception: pass` → loguru logging | `app.py`, `core/cache_db.py`, `downloads/download_service.py` | 1g |
-| 1.2 | Lazy import'ları module seviyesine taşı | `app.py` (~5 yer) | 0.5g |
-| 1.3 | HTTP connection pooling (`requests.Session`) | Tüm provider'lar | 1g |
-| 1.4 | Provider retry/backoff (`tenacity`) | `providers/hf_provider.py`, `providers/ollama_provider.py` | 1g |
-| 1.5 | Error type hierarchy oluştur | `core/errors.py` (yeni) | 0.5g |
+1. Prefer small, reversible PRs with a single acceptance contract.
+2. Treat exact-head CI evidence as the merge gate. A new head SHA invalidates prior green evidence.
+3. Preserve existing public contracts unless the PR explicitly changes them.
+4. Add focused regression coverage for every correctness fix before merge.
+5. Keep provider failures observable: no silent false-success paths.
+6. Review documentation after every successful merge. Update affected docs in the same PR when practical; otherwise open an immediate narrow docs follow-up before unrelated feature work.
+7. Raise quality gates only when the repository already passes them; do not weaken tests or exclusions to make a gate green.
 
-**Toplam:** ~4g · **Test:** Mevcut testler yeşil + yeni error path testleri
+## Completed Baseline
 
----
+The following items from the old roadmap are already implemented and should not be re-opened as generic tasks:
 
-## Faz 2: Monoliti Kır — `app.py`
-*En kritik teknik borç. 2466 satır → modüler yapı.*
+- Modular TUI support modules under `app/` for viewer extensions, modals, widgets, download management, search state, and constants.
+- Parallel provider fan-out in `SearchOrchestrator` with bounded workers and cancellation polling.
+- Provider capability metadata as the authority for search, pagination, installed-list, and download behavior.
+- Shared `requests.Session` pooling plus retry/backoff for retryable GET failures.
+- Structured provider diagnostics via `ProviderError`, preserved through provider results and orchestration.
+- Structured/legacy diagnostic containment for Hugging Face, Ollama, LM Studio, Docker Model Runner, and MLX search paths.
+- REST `/api/v1/models` additive `errors` and `structured_errors` output.
+- CLI provider diagnostics on stderr while preserving script-safe JSON stdout.
+- Search cancellation and provider-authoritative pagination handling.
+- Shared SQLite cache connection with serialized access and retry-on-connection-error behavior.
+- Bounded multi-worker download service (`AIMODEL_DOWNLOAD_MAX_WORKERS`, default `2`).
+- Loopback-only download-service transport with optional bearer-token protection for non-health endpoints.
+- Platform-specific user-data locations for cache/download state and Hugging Face model files.
+- MoE-aware model-size estimation delegated to one canonical implementation.
+- Pre-built GPU bandwidth lookup instead of repeated linear scans.
+- REST parameter validation for provider, limit, context, and sort inputs.
+- CI verify + smoke matrices on Ubuntu and Windows with Python 3.12 and 3.14.
+- More than 600 deterministic tests in the current verify lane.
+- TUI stale-search-cache fallback for disconnected/offline search recovery.
 
-| # | Görev | Hedef | Süre |
-|---|-------|-------|------|
-| 2.1 | Modal screen'leri ayır | `app/modals.py` (4 modal) | 1.5g |
-| 2.2 | Widget'ları ayır | `app/widgets.py` (`SystemInfoWidget`) | 0.5g |
-| 2.3 | Download lifecycle'ı delegate'e çıkar | `app/download_delegate.py` | 2g |
-| 2.4 | Search orchestration'ı coordinator'a çıkar | `app/search_coordinator.py` | 2g |
-| 2.5 | `AIModelViewer`'ı compose et | `app/app.py` (yeni, ~600 satır) | 2g |
+## P1 — Quality Baseline
 
-**Toplam:** ~8g · **Risk:** YÜKSEK — regression riskine karşı Faz 3 ile paralel test yazılmalı
+### Q1. Establish a measured coverage baseline and enforce it in CI
 
----
+Current state:
 
-## Faz 3: Test Coverage Artırımı
-*Hedef: %40 → %60 coverage gate.*
+- `pyproject.toml` contains `fail_under = 45`.
+- The normal `scripts/dev.py verify` lane runs tests, import smoke, and Ruff; it does **not** currently enforce a coverage threshold.
 
-| # | Görev | Detay | Süre |
-|---|-------|-------|------|
-| 3.1 | Faz 2 çıktılarına unit test | Yeni modüller + mevcut `app.py` davranışı | 3g |
-| 3.2 | Download service testleri | Worker loop, cancellation, subprocess | 1.5g |
-| 3.3 | Ollama scraping mock testleri | HTML fixture + parse test | 1g |
-| 3.4 | Error path coverage | Tüm `except` blokları test edilsin | 1.5g |
-| 3.5 | Coverage gate güncelle | `fail_under = 40` → `60` | 0.5g |
+Plan:
 
-**Toplam:** ~7.5g · **Not:** Faz 2 ile paralel ilerleyebilir
+1. Add a reproducible coverage command/lane without changing production behavior.
+2. Record the measured baseline on Linux/Python 3.12.
+3. Add focused tests for low-coverage, high-risk paths before changing the gate.
+4. Raise the enforced threshold in stages: **50 → 55 → 60**.
+5. Do not reach targets by excluding meaningful production modules or weakening assertions.
 
----
+Priority coverage targets:
 
-## Faz 4: Mimari İyileştirme
-*Performans ve bakım kolaylığı.*
+- TUI search/application boundaries and state transitions.
+- Download service runner/store/cancellation/version-compatibility paths.
+- Provider error/parse/retry boundaries.
+- Platform-specific hardware detection fallbacks.
+- REST and CLI public contracts.
 
-| # | Görev | Detay | Süre |
-|---|-------|-------|------|
-| 4.1 | Duplicate `estimate_model_size_gb` tekilleştir | `utils.py` sürümünü deprecate et | 0.5g |
-| 4.2 | Provider aramalarını paralelleştir | `ThreadPoolExecutor` ile eşzamanlı sorgu | 1g |
-| 4.3 | SQLite connection pooling | Connection-per-operation → module-level pool | 1g |
-| 4.4 | `find_gpu_bandwidth` optimizasyonu | Linear scan → normalized lookup table | 0.5g |
-| 4.5 | GPU bandwidth linear search optimize | Build trie at module load time | 0.5g |
+### Q2. Residual silent-failure audit
 
-**Toplam:** ~3.5g · **Bağımlılık:** Faz 2 tamamlanmış olmalı
+Audit remaining broad exception/suppression boundaries and classify each as one of:
 
----
+- expected fail-closed behavior with logging,
+- user-visible diagnostic required,
+- specific exception types required,
+- intentional best-effort behavior that should be documented.
 
-## Faz 5: Provider Sağlamlaştırma
-*Güvenlik ve sağlamlık.*
+Initial targets:
 
-| # | Görev | Detay | Süre |
-|---|-------|-------|------|
-| 5.1 | Ollama scraping → resmi API | Ollama API dokümantasyonu araştır + implemente et | 2g |
-| 5.2 | HF token env → stdin pipe | Güvenlik iyileştirmesi | 0.5g |
-| 5.3 | `api_server.py` input validasyonu | 400 vs 500 hata yönetimi | 0.5g |
-| 5.4 | `shell=True` kaldır (legacy) | `terminal_ui/app.py` | 0.5g |
-| 5.5 | Hataları string → structured error tipleri | Tüm provider `search()` yöntemleri | 1g |
+- provider registry import/detection suppression,
+- `app/viewer.py` selector synchronization fallback,
+- download polling/update boundaries,
+- platform hardware probes.
 
-**Toplam:** ~4.5g · **Bağımlılık:** Faz 1 (error types), Faz 4 (paralel arama)
+The goal is not “remove every `except Exception`”; it is to eliminate unobservable failures where they can mislead users or hide correctness problems.
 
----
+## P1 — Ollama Registry Resilience
 
-## Faz 6: Performans & UX
-*Kullanıcıya yansıyan iyileştirmeler.*
+Ollama remote discovery still depends on `ollama.com` HTML structure. This is the largest remaining external-format fragility.
 
-| # | Görev | Detay | Süre |
-|---|-------|-------|------|
-| 6.1 | DataTable incremental update | `refresh_table()` rebuild → `update_cell()` | 1.5g |
-| 6.2 | Search cancellation | Yeni arama eskiyi iptal etsin | 1g |
-| 6.3 | Download multi-worker | `max_workers` ile paralel indirme | 1.5g |
-| 6.4 | Offline/cache-first mod | Ağ yoksa önbellekten oku | 2g |
-| 6.5 | UI donma azaltma | Uzun işlemlerde progress feedback | 1g |
+### O1. Fixture-backed parser contracts
 
-**Toplam:** ~7g · **Bağımlılık:** Faz 2 + Faz 4
+- Store representative sanitized/cached HTML fixtures for the currently supported result shapes.
+- Test table/card/anchor extraction and malformed/empty responses deterministically.
+- Pin filtering, ordering, metadata extraction, and no-result behavior.
 
----
+### O2. Structural failure detection
 
-## Dependency Graph
+- Distinguish a genuine zero-result search from “page shape changed and parser matched nothing” where evidence allows.
+- Surface a stable diagnostic rather than silently returning success on a broken parser contract.
 
-```
-Faz 1 (Temel Bakım)
-   │
-   ▼
-Faz 2 (Monolit Kırma) ──► Faz 3 (Test Coverage) [paralel]
-   │                           │
-   ▼                           ▼
-Faz 4 (Mimari İyileştirme) ◄──┘
-   │
-   ▼
-Faz 5 (Provider Sağlamlaştırma)
-   │
-   ▼
-Faz 6 (Performans & UX)
-```
+### O3. Structured-source/API research
 
----
+After parser coverage is strong, research whether Ollama exposes a supported structured registry/search source suitable for replacing or reducing HTML scraping. Do not migrate until compatibility, pagination, metadata quality, and rate-limit behavior are understood.
 
-## Toplam Tahmini Süre
+## P2 — TUI Results Performance
 
-| Faz | Gün |
-|-----|-----|
-| Faz 1 — Temel Sağlık | 4g |
-| Faz 2 — Monolit Kırma | 8g |
-| Faz 3 — Test Coverage | 7.5g |
-| Faz 4 — Mimari İyileştirme | 3.5g |
-| Faz 5 — Provider Sağlamlaştırma | 4.5g |
-| Faz 6 — Performans & UX | 7g |
-| **Toplam** | **~34.5g** |
+The TUI still clears/rebuilds result table rows in important refresh paths.
 
-*Tam zamanlı tek geliştirici — tahmini 7 hafta.*
+### U1. Measure before changing
+
+- Add a repeatable benchmark/test harness for row refresh at representative result counts.
+- Separate column-layout rebuilds from ordinary row-state updates.
+
+### U2. Incremental updates where safe
+
+- Use stable row keys and `DataTable.update_cell()`/row updates for download/progress/state changes that do not require full re-sort/re-filter.
+- Keep full rebuilds for structural column changes or result-order changes when simpler and safer.
+- Preserve cursor/scroll position and compact/comfortable layout behavior.
+
+## P2 — Platform Acceptance Matrix
+
+CI currently verifies Ubuntu and Windows on Python 3.12/3.14. Runtime support remains Python 3.10-3.14, but provider/platform acceptance needs clearer evidence.
+
+Build an explicit matrix for:
+
+- Windows native,
+- WSL/Linux,
+- Linux native,
+- macOS Apple Silicon.
+
+For each platform record:
+
+- bootstrap + package install,
+- CLI smoke,
+- REST smoke,
+- TUI startup smoke,
+- cache/download data paths,
+- provider detection behavior,
+- relevant runtime integrations (Ollama, LM Studio, Docker Model Runner, MLX).
+
+Automate only where runners and services make the result reliable; keep clearly documented manual acceptance where hosted CI cannot represent the real runtime.
+
+## P3 — Provider and Runtime Edge Cases
+
+Address these only after P1 work unless a concrete user-facing defect is found:
+
+- MLX `list_installed()` filesystem I/O containment parity with MLX search.
+- LM Studio metadata helper response-shape containment if/when it has a production caller.
+- Docker/LM Studio/MLX limit and installed-list edge cases not reachable through current user-facing limits.
+- Provider registry diagnostics/observability improvements.
+- Further type tightening around provider duck-typed interfaces.
+
+## P3 — Maintainability and Product Work
+
+Candidate work after the quality/resilience baseline:
+
+- More scriptable structured CLI output without breaking existing JSON contracts.
+- REST/provider surface convergence where it materially improves users rather than adding abstraction for its own sake.
+- Additional cache/offline behavior beyond the existing TUI stale-cache fallback, if CLI/REST offline workflows become a product requirement.
+- Packaging/release automation improvements once release cadence requires them.
+
+## Documentation Sync Policy
+
+`docs/maintenance.md` is the operational rule for keeping documentation current.
+
+At every successful merge, review at minimum:
+
+- `README.md` for user-facing behavior/configuration,
+- `CHANGELOG.md` for release-significant behavior,
+- this roadmap for completed/changed priorities,
+- `.planning/codebase/` when architecture, integrations, testing, stack, or known concerns changed.
+
+A merged implementation is not considered fully documented if it leaves a known active document materially false.

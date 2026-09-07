@@ -1,193 +1,239 @@
 # Architecture
 
-**Analysis Date:** 2026-06-09
+**Baseline date:** 2026-09-07  
+**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
 
-## Pattern Overview
+## Overview
 
-**Overall:** Monolithic TUI application with layering via internal packages + background subprocess service
+AI Model Explorer is a terminal-first local application with three user-facing surfaces over shared core logic:
 
-The application runs as a single Textual-based TUI process (`app.py:673`, class `AIModelViewer`) that orchestrates the entire user experience. A separate background process (`downloads/download_service.py`) handles model downloads asynchronously, communicating over HTTP on `127.0.0.1:8765`.
+- Textual TUI (`main.py` → `app.viewer.AIModelViewer`),
+- Click CLI (`cli.py`),
+- localhost REST API (`api_server.py`).
 
-**Key Characteristics:**
-- Provider plugin model via `BaseProvider` ABC (`providers/__init__.py:16`) — Ollama, HuggingFace, LM Studio, Docker, MLX
-- 4-dimension scoring engine (`core/scoring.py`) — Quality, Speed, Fit, Context metrics
-- Dual-mode UI: "comfortable" (full) and "compact" (minimal) views
-- Dual-cache strategy: SQLite for persistent metadata + in-memory for search results
-- CLI alternative via Click (`cli.py`) and REST API via `http.server` (`api_server.py:8787`)
+Model discovery is provider-based. Download execution is isolated in a separate localhost HTTP service so jobs can continue independently of TUI lifecycle.
 
-## Layers
+The architecture is no longer the old single-file `app.py` monolith described by the 2026-06-09 mapper output. The main Textual implementation still lives in `tui_app.py`, but provider selection, modals, widgets, search state, and download-management concerns have been extracted into focused modules under `app/`; search fan-out is isolated in `search/search_orchestrator.py`.
 
-**1. TUI Presentation (Heaviest Layer):**
-- Purpose: Render the terminal UI, handle keyboard/mouse input, manage widgets
-- Location: `app.py` (2466 lines — the monolith)
-- Contains: `AIModelViewer(App)` main class, 4 modal screens (`ModelDetailModal`, `DownloadJobModal`, `PlanModeModal`, `ComparisonModal`), `SystemInfoWidget`
-- Depends on: All other layers (core, providers, downloads, search, results)
-- Used by: `main.py` entry point
+## Major Components
 
-**2. CLI Layer:**
-- Purpose: Command-line access to search, scoring, hardware info, cache management
-- Location: `cli.py` (398 lines)
-- Contains: 8 Click commands (`info`, `system`, `search`, `fit`, `recommend`, `plan`, `scores`, `cache-clear`, `cache-stats`, `version`)
-- Depends on: `core`, `providers`
-- Used by: `pyproject.toml` entry point `ai-model-explorer-cli = "cli:cli"`
+### 1. Runtime TUI
 
-**3. REST API Layer:**
-- Purpose: Machine-readable HTTP API for programmatic access
-- Location: `api_server.py` (339 lines)
-- Contains: `ModelAPIHandler`, `create_server()`, `run_server()`, `start_server_background()`
-- Depends on: `core`, `providers`
-- Endpoints: `/health`, `/api/v1/system`, `/api/v1/models`, `/api/v1/models/{name}/plan`, `/api/v1/scores/{name}`, `/api/v1/providers`
+Entry path:
 
-**4. Core Domain:**
-- Purpose: Business logic — hardware detection, model scoring, caching, utilities
-- Location: `core/` (1627 total lines across 8 files)
-- Sub-modules:
-  - `hardware.py` — `HardwareMonitor`, GPU vendor detection, Ollama process check (389 lines)
-  - `scoring.py` — 4-dimension scoring engine, GPU bandwidth lookup, use-case weights (475 lines)
-  - `model_intelligence.py` — MoE detection, quantization selection, size estimation (334 lines)
-  - `models.py` — `ModelResult` TypedDict type definition (54 lines)
-  - `utils.py` — Model name parsing, fit calculation, helpers (183 lines)
-  - `cache_db.py` — SQLite-backed cache for model metadata + hardware snapshots (158 lines)
-  - `logging_.py` — loguru setup with file rotation (33 lines)
-- Used by: All other layers
+```text
+main.py
+  -> app/viewer.py
+       -> tui_app.AIModelViewer
+```
 
-**5. Provider Layer:**
-- Purpose: Abstracted search backends for different model sources
-- Location: `providers/` (1162 total lines across 6 files)
-- Contains:
-  - `__init__.py` — `BaseProvider` ABC, provider registry with lazy imports (154 lines)
-  - `hf_provider.py` — HuggingFace Hub search + metadata enrichment (272 lines)
-  - `ollama_provider.py` — Ollama registry scraping + local API (325 lines)
-  - `lmstudio_provider.py` — LM Studio local API search (123 lines)
-  - `docker_provider.py` — Docker Model Runner search (139 lines)
-  - `mlx_provider.py` — Apple Silicon MLX local scan (149 lines)
+Responsibilities:
 
-**6. Search Layer:**
-- Purpose: Search orchestration, caching, query building
-- Location: `search/` (212 total lines across 2 files)
-- Contains:
-  - `search_orchestration.py` — Provider-aware pagination, query key building, status messages (123 lines)
-  - `search_cache.py` — In-memory cache with hardware-aware invalidation (89 lines)
+- Textual layout and event handling,
+- user search/filter/sort actions,
+- cache/stale-cache use,
+- result rendering,
+- hardware status presentation,
+- coordination with download manager and search orchestrator.
 
-**7. Results Layer:**
-- Purpose: Table layout, cell formatting, filtering/sorting
-- Location: `results/` (589 total lines across 4 files)
-- Contains:
-  - `results_layout.py` — Responsive column computation for DataTable (167 lines)
-  - `results_presenter.py` — Color-coded cell markup for all columns (241 lines)
-  - `results_text.py` — Text truncation, alignment, header formatting (62 lines)
-  - `results_view.py` — Filter and sort logic for model results (119 lines)
+Supporting modules under `app/`:
 
-**8. Downloads Layer:**
-- Purpose: Manage model downloads asynchronously
-- Location: `downloads/` (1376 total lines across 8 files)
-- This layer has TWO components:
-  - **In-process client code:** `download_history.py`, `download_lifecycle.py`, `download_manager.py`, `download_status.py`, `service_client.py`, `hf_downloader.py`
-  - **Background service:** `download_service.py` (796 lines) — Separate subprocess with its own HTTP server
+- `viewer.py` — runtime subclass/provider-selector integration,
+- `modals.py` — model detail, download, plan, and comparison modal screens,
+- `widgets.py` — focused Textual widgets,
+- `download_manager.py` — TUI-side download coordination,
+- `search_results_state.py` — search-result state/invariants,
+- `search_constants.py` — filter/sort/use-case UI constants.
 
-**9. Configuration:**
-- Purpose: Centralized settings with env var overrides
-- Location: `config.py` (62 lines)
-- Contains: `Settings` dataclass via `pydantic_settings.BaseSettings`
+`tui_app.py` remains the largest presentation module and is still a performance/refactor sensitivity area, but it is no longer responsible for every concern in the application.
 
-## Data Flow
+### 2. Search Layer
 
-**Primary Flow — Search:**
+Key modules:
 
-1. User types query in Input widget -> `on_input_submitted` (`app.py:1582`)
-2. `start_search()` debounces (120ms), builds cache key -> `_dispatch_debounced_search()` (`app.py:1613`)
-3. Checks `SearchCache` (in-memory, hardware-aware) — if hit, returns cached results
-4. Cache miss -> `run_search_worker()` in background thread (`app.py:2204`)
-5. Worker queries configured providers (Ollama, HF, LM Studio, Docker, MLX)
-6. Each result is scored via `enrich_result_with_scores()` from `core/scoring.py`
-7. Results combined -> cached -> `on_search_completed()` -> `refresh_table()`
-8. `filter_results_for_view()` applies provider/use-case/hidden-gem/fit/sort filters (`app.py:2378`)
+- `search/search_orchestrator.py` — parallel provider fan-out/fan-in, cancellation polling, deterministic grouping, structured diagnostics,
+- `search/search_orchestration.py` — provider selection, pagination/capability rules, query/status helpers,
+- `search/search_cache.py` — in-memory hardware-aware search cache with stale-entry access for TUI offline fallback.
 
-**Secondary Flow — Model Download:**
+`SearchOrchestrator` uses a bounded `ThreadPoolExecutor` and keeps provider result grouping deterministic:
 
-1. User clicks "Download" in `ModelDetailModal` -> `start_model_download()` (`app.py:1890`)
-2. `service_client.create_job()` sends HTTP POST to download service on port 8765
-3. Download service receives job -> `DownloadStore.upsert_job()` writes to SQLite queue
-4. Worker loop picks up queued job -> spawns `subprocess.Popen` (ollama pull or HF snapshot_download)
-5. `_run_stream_download_job()` / `_run_hf_api_download_job()` monitor progress via stdout parsing
-6. Status polling: `app.py` polls `GET /jobs` every 1.5s via `_run_download_poll_worker()` (thread)
-7. Results table updates download state column in real-time
+1. Ollama,
+2. Hugging Face,
+3. extra providers.
 
-**Tertiary Flow — Hardware Monitoring:**
+Cancellation is polled while futures are pending so the caller can return without waiting for still-running provider workers.
 
-1. `on_mount()` starts polling timers (`app.py:1220`):
-   - `system_metrics_timer`: every 3s -> `request_system_info_refresh()`
-   - `download_status_timer`: every 1.5s -> `request_download_poll()`
-2. `_run_system_info_refresh_worker()` (thread) -> `monitor.get_specs()` + `check_ollama_running()`
-3. Results update `SystemInfoWidget` header and cached `latest_specs`
-4. Hardware changes automatically invalidate search cache
+### 3. Provider Layer
 
-**State Management:**
-- UI state: Stored as instance attributes on `AIModelViewer` (no reactive state management beyond Textual's built-in)
-- Search results: `self.all_results` — a flat list of `ModelResult` dicts
-- Comparison set: `self.comparison_set` — list of up to 4 model dicts
-- Download registry: `self.download_registry` — dict keyed by `target_id`
-- Configuration: Singleton `config.settings` object (Pydantic Settings)
-- Persistent state: SQLite databases (cache + download queue)
+Providers:
 
-## Key Abstractions
+- Ollama,
+- Hugging Face,
+- LM Studio,
+- Docker Model Runner,
+- MLX.
 
-**BaseProvider (`providers/__init__.py:16`):**
-- Purpose: Pluggable search backend interface
-- Methods: `detect()`, `search()`, `list_installed()`, `search_with_installed()`
-- Implementations: Ollama, HuggingFace, LM Studio, Docker, MLX (only Ollama + HF are used in primary search path)
+Provider capabilities are defined centrally in `providers/capabilities.py`. Capability metadata is used to decide searchability, pagination, installed-list support, downloadability, and provider-selection behavior.
 
-**Scores dataclass (`core/scoring.py:136`):**
-- Purpose: Immutable container for 4-dimension + composite scores
-- Fields: `quality`, `speed`, `fit`, `context`, `composite`, `estimated_tok_s`
-- Computed by `score_model()` with use-case-weighted aggregation
+The provider contract uses `SearchResult` (`providers/base.py`) with:
 
-**ModelResult TypedDict (`core/models.py:4`):**
-- Purpose: Canonical shape for all model result dicts across providers
-- All fields optional (`total=False`) — providers populate different subsets
+- `results`,
+- legacy human-readable `errors`,
+- `has_more_pages`,
+- machine-readable `structured_errors` (`ProviderError`).
 
-**HardwareMonitor (`core/hardware.py:100`):**
-- Purpose: Detect and snapshot local hardware
-- Detects: NVIDIA (pynvml/nvidia_smi), AMD (rocm-smi), Apple Silicon (system_profiler), Intel Arc (lspci)
-- Output: CPU name/cores, RAM total/free, VRAM total/free, GPU name, vendor, backend
-- Graceful fallback at every level
+Transient/search/parse/I/O failures should normally be contained inside provider results instead of escaping as uncaught exceptions.
 
-**DownloadService / DownloadStore (`downloads/download_service.py`):**
-- Purpose: Background HTTP service for asynchronous model downloads
-- Threading: Worker thread + locking for SQLite access + process tracking
+### 4. Error and Diagnostic Flow
 
-## Entry Points
+`core/errors.py` defines `ProviderError` metadata such as:
 
-| Entry Point | File | How Invoked | Purpose |
-|-------------|------|-------------|---------|
-| `main()` | `main.py:23` | `ai-model-explorer` console script | Starts Textual TUI |
-| `cli()` | `cli.py:14` | `ai-model-explorer-cli` console script | CLI commands |
-| `api_server.main()` | `api_server.py:326` | `python -m api_server` | REST API server (port 8787) |
-| `download_service.main()` | `downloads/download_service.py:742` | Auto-launched by `ensure_service_running()` | Background download worker (port 8765) |
+- provider slug,
+- stable code,
+- message,
+- retryability,
+- optional HTTP status,
+- optional retry-after duration.
 
-## Error Handling
+Diagnostic flow:
 
-**Strategy:** Defensive logging with broad exception catches. Most error recovery is silent (log or status bar message). Providers return diagnostics as a `list[str]` carried inside a `SearchResult` (see `providers/base.py`); downstream code never sees a typed exception.
+```text
+provider
+  -> SearchResult.errors + SearchResult.structured_errors
+  -> SearchOrchestrator SearchOutcome
+  -> TUI status/error handling
+```
 
-**Patterns:**
-- Broad `except Exception: pass` — used extensively across the codebase (e.g., `app.py:967`, `app.py:1237`, `app.py:1318`, etc.)
-- HTTP error recovery: `service_client.py` retries once with `ensure_service_running()` on 404
-- Graceful degradation: Hardware detection fails -> returns empty specs; Search fails -> shows error in results table
-- Status bar updates via `self.update_status()` are the primary user-facing error channel
-- Error messages are plain strings. The earlier `core/errors.py` typed hierarchy (added in commit 923f3d6, 2026-06-09) was removed: only one of five providers used it, and the receiving TUI flattened the types to strings anyway, so the type information did not survive the seam.
+Other surfaces preserve diagnostics independently:
 
-## Cross-Cutting Concerns
+- REST `/api/v1/models` returns additive `errors` and `structured_errors` arrays while preserving HTTP-200 partial-result semantics.
+- CLI `search`, `fit`, and `recommend` emit provider warnings on stderr. `recommend --json` keeps stdout as the existing JSON array contract.
 
-**Logging:** loguru configured in `core/logging_.py` — stderr (INFO) + file rotation (DEBUG). Used sparsely across provider and service code.
+The remaining goal is not to remove all broad catches, but to ensure user-impacting failures are observable and correctly classified.
 
-**Validation:** Minimal — Pydantic validates config only. Search queries are raw strings. No schema validation for API endpoints.
+### 5. HTTP Client Layer
 
-**Threading:**
-- Textual's `@work(thread=True)` decorator for non-blocking operations
-- Manual `call_from_thread()` for cross-thread UI updates
-- `threading.Lock` for SQLite in `cache_db.py` and `DownloadStore`
-- `threading.Event` for graceful shutdown in download service
+`core/http_client.py` owns the shared `requests.Session` used by requests-based providers. It provides:
 
----
+- connection reuse,
+- retry/backoff for retryable GET failures,
+- handling for 429 and common 5xx responses.
 
-*Architecture analysis: 2026-06-09*
+Hugging Face also uses `huggingface_hub` APIs for search/download-specific operations.
+
+### 6. Core Domain
+
+`core/` contains UI-independent domain services:
+
+- hardware detection and snapshots,
+- scoring and GPU-bandwidth lookup,
+- MoE/model-size/quantization intelligence,
+- metadata/hardware SQLite cache,
+- shared utilities,
+- logging,
+- typed provider errors.
+
+`core/cache_db.py` uses a shared SQLite connection guarded by an `RLock`, reopens when the configured path changes, and retries after SQLite connection errors.
+
+### 7. Results Layer
+
+`results/` contains mostly pure presentation helpers:
+
+- responsive column layout,
+- cell markup,
+- text alignment/truncation,
+- filtering/sorting/view selection.
+
+The main TUI still performs full DataTable rebuilds in important refresh paths. Incremental updates are a planned performance improvement, not a correctness requirement.
+
+### 8. Download Layer
+
+The download system has two sides:
+
+**TUI/client side**
+
+- `app/download_manager.py`,
+- `downloads/service_client.py`,
+- lifecycle/history/status helpers.
+
+**Background service side**
+
+- `downloads/download_service.py`,
+- `downloads/api.py`,
+- `downloads/store.py`,
+- `downloads/runner.py`.
+
+The service runs on loopback (default `127.0.0.1:8765`) and persists jobs in SQLite. Work is dispatched through a bounded `ThreadPoolExecutor`; default concurrency is 2 and is configurable with `AIMODEL_DOWNLOAD_MAX_WORKERS`.
+
+The service supports an optional bearer token for non-health endpoints. Non-loopback bind/client hosts are rejected until authenticated TLS transport is implemented.
+
+### 9. REST API
+
+`api_server.py` exposes localhost programmatic access on `127.0.0.1:8787` by default.
+
+Current model-search providers exposed through `/api/v1/models` are Ollama and Hugging Face. The provider descriptor endpoint exposes the canonical provider registry and identifies which providers are supported by the REST model endpoint.
+
+Request validation returns 400 for invalid provider/limit/context/sort inputs rather than relying on outer 500 handling.
+
+### 10. CLI
+
+`cli.py` provides:
+
+- hardware/system info,
+- model search,
+- hardware-fit listing,
+- recommendations,
+- hardware planning,
+- scoring,
+- cache helpers.
+
+Provider errors are surfaced on stderr. JSON recommendation output remains stdout-only JSON for scripting compatibility.
+
+## Primary Search Flow
+
+```text
+query/filter action
+  -> build provider selection + query key
+  -> SearchCache lookup
+       -> fresh hit: use cached result
+       -> stale hit may be used as TUI offline fallback
+  -> background SearchOrchestrator
+       -> providers run in parallel
+       -> SearchResult diagnostics collected
+       -> cancellation observed between future completions
+  -> SearchOutcome
+  -> cache/update state
+  -> filter/sort/render DataTable
+```
+
+Only the selected single paginated provider may authorize a next page. Multi-provider search does not synthesize continuation from result counts.
+
+## Primary Download Flow
+
+```text
+TUI action
+  -> service_client HTTP request
+  -> download-service API
+  -> DownloadStore SQLite state
+  -> bounded worker pool
+  -> runner (Ollama pull or HF download path)
+  -> persisted state/progress
+  -> TUI polling snapshot
+  -> row/history update
+```
+
+## State and Storage
+
+- Search result state: `SearchResultsState` + in-memory `SearchCache`.
+- Persistent model/hardware metadata: SQLite cache DB.
+- Download job state/history: download-service SQLite DB.
+- Default DB/model directories: OS-specific user-data paths via configuration/platformdirs.
+- Runtime configuration: singleton Pydantic Settings object (`config.settings`).
+
+## Cross-Cutting Rules
+
+- Public behavior is shared conceptually, but TUI/CLI/REST are not forced through one abstraction when that would break surface-specific contracts.
+- Provider capabilities are authoritative; UI heuristics should not invent capabilities.
+- Diagnostic metadata is additive and must not require string parsing for machine-readable callers.
+- Correctness fixes should preserve partial-success behavior when one provider fails and another succeeds.
+- Documentation must be re-reviewed after architecture-affecting merges; see `docs/maintenance.md`.

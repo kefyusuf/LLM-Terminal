@@ -1,5 +1,55 @@
 # Changelog
 
+**Unreleased development notes**
+
+### Reliability and provider correctness
+
+- Added canonical provider capabilities for Ollama, Hugging Face, LM Studio, Docker Model Runner, and MLX and moved pagination/download/search decisions away from UI heuristics.
+- Added parallel multi-provider search orchestration with bounded workers, deterministic result grouping, cancellation polling, partial-result preservation, and provider-authoritative pagination.
+- Added structured provider diagnostics (`ProviderError`) alongside legacy human-readable errors and preserved them through search orchestration.
+- Hardened Hugging Face and Ollama transient failures with retry/backoff and retry-after handling.
+- Added LM Studio and Docker HTTP/transport/parse containment with stable structured error codes.
+- Hardened Docker installed-model response parsing by reusing the validated search response parser.
+- Hardened MLX cache scanning against filesystem I/O failures and enforced a true global search result limit across cache roots.
+- Preserved orchestrator-generated provider failures as machine-readable diagnostics instead of dropping them to strings only.
+- Fixed provider pagination authority so non-paginated/multi-provider searches cannot synthesize false continuation from result counts.
+
+### REST and CLI contracts
+
+- REST `/api/v1/models` now preserves provider `errors` and additive `structured_errors`, allowing partial models and diagnostics to coexist without changing the existing HTTP-200 partial-success contract.
+- REST model/provider/limit/context/sort validation now returns bounded 400 responses for invalid inputs rather than relying on generic 500 handling.
+- CLI `search`, `fit`, and `recommend` now surface provider failures on stderr instead of presenting them as ordinary zero-result success.
+- Preserved `recommend --json` stdout as the existing JSON array contract while diagnostics are emitted separately on stderr.
+- Propagated configured Hugging Face authentication consistently through CLI and REST search paths.
+
+### Search, cache, and performance
+
+- Moved provider fan-out/fan-in into a Textual-independent `SearchOrchestrator` with focused cancellation and error-path tests.
+- Added hardware-aware search caching with stale-entry fallback for TUI disconnected/offline recovery.
+- Switched requests-based provider traffic to a shared pooled session with retryable GET handling.
+- Switched metadata cache access to a shared SQLite connection guarded by locks, with reopen/retry behavior after connection errors.
+- Consolidated model-size estimation on the MoE-aware implementation and replaced repeated GPU-bandwidth linear scans with pre-built lookup maps.
+
+### Download service and local security boundary
+
+- Refactored download service responsibilities across API, store, runner, service client, and lifecycle/state helpers.
+- Added bounded parallel download workers controlled by `AIMODEL_DOWNLOAD_MAX_WORKERS` (default `2`).
+- Moved runtime databases/model output toward OS-specific per-user application-data locations with configuration overrides.
+- Hardened the download-service trust boundary: loopback-only bind/client hosts, optional bearer-token protection for non-health endpoints, and explicit rejection of non-loopback transport until TLS exists.
+- Expanded cancellation, process, persistence, debug, service-version, and compatibility coverage.
+
+### Packaging, CI, and verification
+
+- Standardized development workflow around `scripts/dev.py bootstrap`, `verify`, and `smoke` with committed platform-specific dependency locks.
+- Expanded supported runtime metadata to Python 3.10-3.14 and CI verification to Ubuntu/Windows on Python 3.12 and 3.14.
+- Added/expanded separate CI verify, smoke, and Package gates used as exact-head merge evidence.
+- Expanded the deterministic verify suite to more than 600 tests (603 observed on the 2026-09-07 PR #63 Ubuntu/Python 3.12 verify job).
+
+### Documentation
+
+- Replaced the stale 2026-06-09 planning/codebase mapper baseline with a current post-hardening architecture, structure, stack, testing, integrations, concerns, and active roadmap baseline.
+- Added a documentation-maintenance policy requiring relevant README/CHANGELOG/roadmap/codebase docs to be reviewed after each successful merge.
+
 ## 1.0.1 - 2026-03-26
 
 ### Release Notes
@@ -26,7 +76,7 @@
 - Added unit tests for fallback history entries, external-entry detection, action labels, and cancel payload shaping.
 - Extracted results-table filtering and hidden-gem ordering into `results_view.py` and reused it in `app.py`.
 - Added tests for result row key generation and result filtering/sorting behavior.
-- Extracted responsive result-column layout rules into `results_layout.py` and reused them from `app.py`.
+- Extracted responsive result-column layout rules into `results_layout.py` and reused it in `app.py`.
 - Added unit tests for layout breakpoint key selection and width distribution.
 - Extracted results-cell markup formatting into `results_presenter.py` and delegated `app.py` cell helpers to it.
 - Added unit tests for fit/mode/source/score/use-case/download cell formatting behaviors.

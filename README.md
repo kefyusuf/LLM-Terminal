@@ -1,64 +1,117 @@
 # AI Model Explorer
 
-AI Model Explorer is a Textual terminal app for discovering, scoring, comparing, and downloading local LLM models across Ollama, Hugging Face, LM Studio, Docker Model Runner, and MLX.
+AI Model Explorer is a terminal-first workspace for discovering, scoring, comparing, and downloading local LLM models across Ollama, Hugging Face, LM Studio, Docker Model Runner, and MLX.
 
 ## About
 
-AI Model Explorer is a terminal-first workspace for people who run local LLMs and want faster answers to three practical questions: which models are worth trying, which ones will actually fit their hardware, and how to download or compare them without bouncing between multiple tools.
+AI Model Explorer helps answer three practical questions:
 
-The repo combines model discovery, hardware-aware scoring, plan-mode analysis, local provider integration, and download orchestration in one place. It is designed for developers and power users who want a Textual UI, a scriptable CLI, and a local REST API over the same core model intelligence.
+1. Which models are worth trying?
+2. Which models will actually fit this hardware?
+3. How can I compare or download them without switching between several tools?
+
+The repository combines a Textual TUI, a scriptable Click CLI, a localhost REST API, hardware-aware scoring, provider orchestration, stale-cache fallback, and a persistent background download service.
 
 ## Features
 
 ### Model Discovery & Search
-- Search across 5 providers: **Ollama**, **Hugging Face**, **LM Studio**, **Docker Model Runner**, **MLX**
-- Filter by provider, use case (coding, chat, vision, reasoning, math, embedding, general)
-- Hidden-gem detection for high-download, low-visibility HF models
-- Parallel provider search (Ollama + Hugging Face + extras concurrently)
-- Stale-cache fallback when offline
 
-### 4-Dimension Scoring System
-- **Quality** (0-100): Parameter count and quantization quality
-- **Speed** (0-100): Estimated tokens/sec based on GPU bandwidth and model size
-- **Fit** (0-100): VRAM utilization efficiency (sweet spot: 50-80%)
-- **Context** (0-100): Context window capacity
-- **Composite score**: Use-case-weighted average (e.g., chat prioritizes speed, reasoning prioritizes quality)
+- TUI search across **Ollama**, **Hugging Face**, **LM Studio**, **Docker Model Runner**, and **MLX**.
+- Filter by provider and use case (coding, chat, vision, reasoning, math, embedding, general).
+- Hidden-gem detection for high-download, low-visibility Hugging Face models.
+- Parallel provider fan-out with deterministic result grouping.
+- Search cancellation so a newer search can supersede in-flight work.
+- Capability-driven pagination; continuation is not inferred from result counts.
+- TUI stale-cache fallback when live search is unavailable and a matching stale entry exists.
+- Provider failures are contained and surfaced instead of silently appearing as ordinary zero-result success.
+
+### Provider Diagnostics
+
+Providers expose both human-readable errors and machine-readable structured diagnostics where supported.
+
+Structured diagnostics include stable metadata such as:
+
+- provider,
+- error code,
+- retryability,
+- optional HTTP status,
+- optional retry-after duration.
+
+The TUI/orchestrator preserves this metadata internally. REST exposes it directly, while CLI model-discovery commands surface human-readable warnings on stderr.
+
+### 4-Dimension Scoring
+
+- **Quality** (0-100): parameter count and quantization quality.
+- **Speed** (0-100): estimated tokens/sec based on GPU bandwidth and model size.
+- **Fit** (0-100): hardware utilization/fit.
+- **Context** (0-100): context-window capacity.
+- **Composite score**: use-case-weighted aggregate.
 
 ### Hardware Intelligence
-- **MoE awareness**: Auto-detects Mixture-of-Experts models (Mixtral, DeepSeek-V2/V3, etc.) and adjusts VRAM calculations
-- **Dynamic quantization**: Automatically selects the best quantization level (Q8_0 to Q2_K) for your hardware
-- **Speed estimation**: Token/sec prediction based on GPU memory bandwidth (80+ GPUs in lookup table)
-- **Multi-GPU support**: NVIDIA (CUDA), AMD (ROCm), Apple Silicon (Metal), Intel Arc (SYCL)
+
+- MoE-aware size/VRAM estimation.
+- Dynamic quantization planning.
+- Token/sec estimation from GPU memory bandwidth.
+- NVIDIA, AMD, Apple Silicon, Intel and CPU fallback detection paths.
+- Multi-GPU-aware hardware snapshots where platform tooling exposes the required data.
 
 ### Plan Mode & Comparison
-- **Plan Mode** (`P`): Reverse hardware analysis — see what GPU you need for any model at any quantization level
-- **Comparison** (`c`/`C`): Side-by-side comparison of up to 4 models with full scoring breakdown
+
+- **Plan Mode** (`P`): reverse hardware analysis for model/quantization choices.
+- **Comparison** (`c`/`C`): side-by-side comparison of up to four models.
 
 ### Download Management
-- Queue, monitor, cancel, and delete downloads through a background HTTP service
-- Track download history with status and details
-- Support for Ollama pull and Hugging Face GGUF downloads
 
-### Theming
-- 5 built-in themes: default, dracula, nord, solarized, monokai
-- Runtime toggle with `t` key
+- Persistent localhost download service.
+- Queue, monitor, cancel and delete jobs.
+- Bounded parallel workers (`AIMODEL_DOWNLOAD_MAX_WORKERS`, default `2`).
+- Ollama pull and Hugging Face download paths.
+- Persistent history independent of TUI lifetime.
+- Loopback-only transport; optional bearer token for non-health service endpoints.
 
 ### REST API
-- Local HTTP API on port 8787 for programmatic access
-- Endpoints: `/health`, `/api/v1/system`, `/api/v1/models`, `/api/v1/models/top`, `/api/v1/models/{name}/plan`, `/api/v1/scores/{name}`, `/api/v1/providers`
+
+Local HTTP API on `127.0.0.1:8787` by default.
+
+Endpoints:
+
+- `/health`
+- `/api/v1/system`
+- `/api/v1/models`
+- `/api/v1/models/top`
+- `/api/v1/models/{name}/plan`
+- `/api/v1/scores/{name}`
+- `/api/v1/providers`
+
+`/api/v1/models` currently searches **Ollama and Hugging Face**. Successful responses include additive `errors` and `structured_errors` arrays so callers can distinguish provider failure from a genuine zero-result search while still receiving partial results.
 
 ### CLI
-- Rich terminal output for search, fit analysis, recommendations, and scoring
-- JSON output support for scripting
+
+Rich terminal commands for system information, search, fit analysis, recommendations, planning and scoring.
+
+CLI search/fit/recommend provider failures are printed to **stderr**. `recommend --json` keeps stdout as valid JSON for scripting.
+
+### Theming
+
+- default
+- dracula
+- nord
+- solarized
+- monokai
+
+Cycle themes at runtime with `t`.
 
 ## Requirements
 
-- Python 3.10-3.14
-- Tested in CI: Python 3.12 and Python 3.14
-- Internet access for provider searches
-- Ollama (optional; required only for local runtime and `ollama pull/run`)
-- LM Studio (optional; auto-detected on `localhost:1234`)
-- Docker Desktop with Model Runner (optional; auto-detected on `localhost:12434`)
+- Python 3.10-3.14.
+- CI currently verifies Python 3.12 and 3.14 on Ubuntu and Windows.
+- Internet access for live remote provider searches.
+- Ollama optional; required for Ollama local runtime/pull operations.
+- LM Studio optional; auto-detected on `localhost:1234` by default.
+- Docker Desktop Model Runner optional; auto-detected on `localhost:12434` by default.
+- macOS Apple Silicon for MLX runtime/cache detection.
+
+The TUI can reuse a matching stale search-cache entry when a live search is unavailable, but this is not a general offline mirror of every provider.
 
 ## Installation
 
@@ -70,25 +123,19 @@ python scripts/dev.py verify
 python scripts/dev.py smoke
 ```
 
-Use a supported Python 3.10-3.14 interpreter for the bootstrap command. On Windows,
-that can be `py -3.14` or another selected interpreter; after bootstrap, prefer the
-project virtualenv instead of a random global `python` on your `PATH`.
+Use a supported Python 3.10-3.14 interpreter for bootstrap. On Windows that can be `py -3.14` or another selected interpreter. After bootstrap, prefer the project virtualenv over a random global Python on `PATH`.
 
-`scripts/dev.py bootstrap` creates or reuses `.venv` and installs from the committed
-platform-specific development lock file. Edit `requirements/requirements.in` and
-`requirements/requirements-dev.in` for dependency intent; bootstrap does not resolve or
-regenerate locks. Canonical lock maintenance stays on Python 3.12 even though the runtime
-support window is 3.10-3.14.
+`scripts/dev.py bootstrap` creates or reuses `.venv` and installs from the committed platform-specific development lock file. Edit `requirements/requirements.in` and `requirements/requirements-dev.in` for dependency intent; bootstrap does not resolve or regenerate locks. Canonical lock maintenance remains explicit.
 
-`scripts/dev.py verify` runs the required local checks in order: `pytest -q`, import smoke,
-and `ruff check .`.
+`scripts/dev.py verify` runs the required local checks: pytest, import smoke and Ruff.
 
-`scripts/dev.py smoke` runs the offline-safe process smoke checks for the CLI, API server,
-TUI startup path, and download service.
+`scripts/dev.py smoke` runs bounded/offline-safe smoke checks for the CLI, REST API, TUI startup path and download service.
+
+The current verify baseline contains **600+ tests** (603 observed in the 2026-09-07 PR #63 Ubuntu/Python 3.12 CI job).
 
 ## Run
 
-### TUI Application
+### TUI
 
 ```bash
 .venv/Scripts/python.exe main.py  # Windows
@@ -96,28 +143,29 @@ TUI startup path, and download service.
 .venv/bin/python main.py          # Linux/macOS
 ```
 
-Or with the installed script entrypoint:
+Installed entry point:
 
 ```bash
 ai-model-explorer
 ```
 
-### CLI Commands
+### CLI
 
 ```bash
-ai-model-explorer-cli system              # Show hardware info
-ai-model-explorer-cli search "llama" -n 5 # Search models
-ai-model-explorer-cli fit --perfect -n 5  # Find best-fitting models
-ai-model-explorer-cli recommend -u coding # Get coding model recommendations
-ai-model-explorer-cli plan "llama-3-8b"   # Hardware requirements analysis
-ai-model-explorer-cli scores "llama-70b"  # Detailed scoring breakdown
+ai-model-explorer-cli system
+ai-model-explorer-cli search "llama" -n 5
+ai-model-explorer-cli fit --perfect -n 5
+ai-model-explorer-cli recommend -u coding
+ai-model-explorer-cli recommend -u coding --json
+ai-model-explorer-cli plan "llama-3-8b"
+ai-model-explorer-cli scores "llama-70b"
 ```
 
-### REST API Server
+### REST API
 
 ```bash
-python -m api_server              # Start on localhost:8787
-python -m api_server --port 9000  # Custom port
+python -m api_server
+python -m api_server --port 9000
 ```
 
 ## Configuration
@@ -126,17 +174,17 @@ python -m api_server --port 9000  # Custom port
 
 | Variable | Default | Description |
 |---|---|---|
-| `AIMODEL_HF_TOKEN` | - | Canonical Hugging Face read-only token setting; standard `HF_TOKEN` is accepted as a fallback |
-| `AIMODEL_HF_MODELS_DIR` | OS-specific user-data `models/` directory | Hugging Face GGUF download directory |
-| `AIMODEL_DOWNLOAD_SERVICE_HOST` | `127.0.0.1` | Download-service bind/client host; non-loopback values are rejected until TLS transport is implemented |
-| `AIMODEL_DOWNLOAD_SERVICE_PORT` | `8765` | Download-service bind/client port |
-| `AIMODEL_DOWNLOAD_SERVICE_TOKEN` | - | Optional bearer token protecting download-service endpoints except `/health`; intended as loopback defence-in-depth |
-| `AIMODEL_DOWNLOAD_MAX_WORKERS` | 2 | Parallel download worker count |
-| `AIMODEL_HF_SEARCH_LIMIT` | 15 | HF results per page |
-| `AIMODEL_HF_SEARCH_MAX_PAGES` | 10 | Max HF pages |
-| `AIMODEL_OLLAMA_API_BASE` | `http://localhost:11434` | Ollama API base URL |
-| `AIMODEL_UI_MODE` | `compact` | UI density: `compact` or `comfortable` |
-| `AIMODEL_THEME` | `default` | Color theme: `default`, `dracula`, `nord`, `solarized`, `monokai` |
+| `AIMODEL_HF_TOKEN` | - | Canonical Hugging Face read-only token; standard `HF_TOKEN` is accepted as fallback |
+| `AIMODEL_HF_MODELS_DIR` | OS-specific user-data `models/` | Hugging Face model download directory |
+| `AIMODEL_DOWNLOAD_SERVICE_HOST` | `127.0.0.1` | Download-service bind/client host; non-loopback hosts are rejected |
+| `AIMODEL_DOWNLOAD_SERVICE_PORT` | `8765` | Download-service port |
+| `AIMODEL_DOWNLOAD_SERVICE_TOKEN` | - | Optional bearer token for download-service endpoints except `/health` |
+| `AIMODEL_DOWNLOAD_MAX_WORKERS` | `2` | Parallel download worker count |
+| `AIMODEL_HF_SEARCH_LIMIT` | `15` | Hugging Face results per page |
+| `AIMODEL_HF_SEARCH_MAX_PAGES` | `10` | Maximum Hugging Face pages |
+| `AIMODEL_OLLAMA_API_BASE` | `http://localhost:11434` | Ollama local API base |
+| `AIMODEL_UI_MODE` | `compact` | `compact` or `comfortable` |
+| `AIMODEL_THEME` | `default` | Color theme |
 | `LMSTUDIO_HOST` | `http://localhost:1234` | LM Studio API address |
 | `DOCKER_MODEL_RUNNER_HOST` | `http://localhost:12434` | Docker Model Runner API address |
 
@@ -144,7 +192,7 @@ python -m api_server --port 9000  # Custom port
 
 ```env
 AIMODEL_HF_TOKEN=hf_your_token_here
-# HF_TOKEN=hf_your_token_here  # Supported fallback for Hugging Face tooling compatibility
+# HF_TOKEN=hf_your_token_here
 # AIMODEL_HF_MODELS_DIR=/custom/path/models
 # AIMODEL_DOWNLOAD_SERVICE_TOKEN=replace-with-a-long-random-secret
 AIMODEL_UI_MODE=compact
@@ -154,56 +202,51 @@ AIMODEL_THEME=nord
 ## Keyboard Shortcuts
 
 | Key | Action |
-| --- | --- |
+|---|---|
 | `/` | Focus search |
 | `r` | Refresh current search |
 | `p` | Cycle provider filter |
-| `[` | Previous page (HF) |
-| `]` | Next page (HF) |
+| `[` | Previous page (Hugging Face) |
+| `]` | Next page (Hugging Face) |
 | `u` | Cycle use-case filter |
-| `s` | Cycle sort mode (composite, speed, quality, name, downloads) |
+| `s` | Cycle sort mode |
 | `f` | Cycle fit filter |
-| `P` | Open plan mode (hardware analysis for selected model) |
-| `c` | Toggle selected model into comparison set |
-| `C` | Show comparison modal (need 2+ models) |
+| `P` | Open plan mode |
+| `c` | Toggle selected model in comparison set |
+| `C` | Show comparison modal (2+ models) |
 | `v` | Toggle compact/comfortable view |
-| `h` | Toggle hidden gems filter |
-| `t` | Cycle color theme |
+| `h` | Toggle hidden-gems filter |
+| `t` | Cycle theme |
 | `q` | Quit |
 
 ## Project Structure
 
 ```text
 llm-terminal/
-  tui_app.py                # Main Textual TUI application
-  main.py                   # Entry point
-  cli.py                    # CLI commands (system, search, fit, recommend, plan, scores)
-  api_server.py             # REST API server (port 8787)
-  config.py                 # Pydantic-settings configuration
-  app/                      # Modular screens, widgets, download manager, search constants
-  core/                     # Shared cache, hardware, logging, model metadata, scoring, and helpers
-  requirements/            # Runtime/dev intent + committed platform locks
-  downloads/               # Download state, lifecycle, command builder, service client, HF downloader
-  results/                 # Table layout, formatting, filtering helpers
-  search/                   # Search cache and provider orchestration
-  scripts/                 # Dev, release, and maintenance utilities (Python + batch)
-  terminal_ui/             # Theme/style assets plus isolated legacy UI internals
-  providers/
-    __init__.py             # BaseProvider ABC + provider registry
-    ollama_provider.py      # Ollama registry search (HTML scraping)
-    hf_provider.py          # Hugging Face API search + download
-    lmstudio_provider.py    # LM Studio local server integration
-    docker_provider.py      # Docker Model Runner integration
-    mlx_provider.py         # Apple Silicon MLX cache integration
-  tests/                    # Test suite (370+ tests)
+  main.py                   # Primary TUI entry point
+  app/viewer.py             # Runtime AIModelViewer/provider selector
+  tui_app.py                # Base Textual application
+  cli.py                    # Click CLI
+  api_server.py             # Local REST API
+  config.py                 # Pydantic settings
+  app/                      # Modals, widgets, TUI state/download support
+  core/                     # Hardware, scoring, cache, HTTP, errors, intelligence
+  providers/                # Provider implementations + capabilities
+  search/                   # Search cache/orchestration/cancellation/pagination
+  results/                  # Result layout/presentation/filtering
+  downloads/                # Download service, API, store, runner, client/helpers
+  requirements/             # Dependency intent + committed platform locks
+  scripts/                  # Dev/release/maintenance tools
+  terminal_ui/              # Theme/style assets and isolated legacy internals
+  tests/                    # 600+ deterministic tests + optional live tests
+  docs/                     # Maintained project/process documentation
+  .planning/                # Active roadmap and current codebase baseline
 ```
 
 ## Scoring System
 
-The scoring engine evaluates models on 4 dimensions, then computes a use-case-weighted composite:
-
 | Use Case | Quality | Speed | Fit | Context |
-|---|---|---|---|---|
+|---|---:|---:|---:|---:|
 | Chat | 0.25 | 0.35 | 0.25 | 0.15 |
 | Coding | 0.35 | 0.30 | 0.20 | 0.15 |
 | Reasoning | 0.55 | 0.15 | 0.15 | 0.15 |
@@ -212,15 +255,33 @@ The scoring engine evaluates models on 4 dimensions, then computes a use-case-we
 | Embedding | 0.30 | 0.40 | 0.20 | 0.10 |
 | General | 0.30 | 0.25 | 0.25 | 0.20 |
 
-**Speed formula**: `tok/s = (GPU_bandwidth_GB/s / model_size_GB) × efficiency_factor`
+Speed approximation:
 
-Where efficiency depends on inference mode: GPU (0.55), GPU+CPU offload (0.30), CPU-only (0.18).
+```text
+tok/s = (GPU bandwidth GB/s / model size GB) × efficiency factor
+```
+
+Inference mode influences the efficiency factor (GPU, GPU+CPU offload, CPU-only).
+
+## Development Roadmap
+
+The active post-hardening roadmap is in `.planning/roadmap.md`.
+
+Current priorities:
+
+1. measured + CI-enforced coverage growth to 60 in stages,
+2. residual silent-failure audit,
+3. Ollama registry parser resilience and structured-source research,
+4. safer incremental TUI DataTable updates,
+5. explicit Windows/WSL/Linux/macOS Apple Silicon acceptance matrix.
+
+Documentation maintenance rules are in `docs/maintenance.md`.
 
 ## Notes
 
-- `terminal_ui/` now exists mainly for theme/style assets; the legacy experimental UI remains isolated there.
-- Download service data and metadata cache are stored in the OS-specific per-user application data directory by default; `AIMODEL_DOWNLOAD_DB_PATH` and `AIMODEL_CACHE_DB_PATH` can override those paths.
-- Hugging Face GGUF files are stored in the same per-user application data directory under `models/` by default; `AIMODEL_HF_MODELS_DIR` can override the destination.
-- Download service remains loopback-only. `0.0.0.0`, LAN addresses, and other non-loopback bind/client hosts are rejected until authenticated TLS transport is implemented. `/health` stays public for probes; when `AIMODEL_DOWNLOAD_SERVICE_TOKEN` is configured, job, debug, cancellation, deletion, and shutdown endpoints require the bearer token on loopback.
-- REST API binds to `127.0.0.1:8787` by default (localhost only).
-- Provider auto-detection runs at startup; unavailable providers are silently skipped.
+- `terminal_ui/` is not the primary application entry point; it mainly contains theme/style assets plus isolated legacy internals.
+- Runtime databases, logs and Hugging Face model files use OS-specific per-user application-data locations by default; configuration can override them.
+- The download service remains loopback-only. LAN/public transport is intentionally rejected until an authenticated TLS design exists.
+- REST API binds to `127.0.0.1:8787` by default and is intended for local use.
+- Optional provider detection failures are contained so unavailable local runtimes do not prevent other providers from working.
+- Ollama remote discovery still depends on `ollama.com` HTML structure; parser resilience is an active roadmap priority.
