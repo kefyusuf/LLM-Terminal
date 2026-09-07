@@ -1,7 +1,7 @@
 # Technology Stack
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
+**Baseline revision:** `5dd4014ef2a50ba14210da0d7b3bf675281c8586`
 
 ## Runtime
 
@@ -87,6 +87,7 @@ Canonical workflow:
 ```bash
 python scripts/dev.py bootstrap
 python scripts/dev.py verify
+python scripts/dev.py coverage
 python scripts/dev.py smoke
 ```
 
@@ -94,28 +95,44 @@ python scripts/dev.py smoke
 
 ### Verification
 
-- **pytest** — main test runner.
+- **pytest** — main deterministic test runner.
+- **pytest-cov / coverage.py** — canonical aggregate coverage measurement and merge gate.
 - **Ruff** — lint/import/static style checks.
 - **Mypy** — configured, non-strict static typing; not the primary merge gate.
-- **coverage / pytest-cov** — available in dev locks.
 
-The current verify lane contains **600+ tests** (603 observed on the 2026-09-07 PR #63 Ubuntu/Python 3.12 verify job).
+The verify suite contains **600+ tests**. Coverage is measured separately so the four-way cross-platform verify matrix is not burdened with redundant coverage execution.
 
-`pyproject.toml` currently sets `fail_under = 45`, but `scripts/dev.py verify` does not run a coverage-enforced lane. Establishing and enforcing a measured staged coverage target is active P1 roadmap work.
+Canonical coverage evidence from PR #67:
+
+- environment: Ubuntu / Python 3.12,
+- measured total: **63%**,
+- statements: `5043`,
+- missed: `1841`,
+- first enforced floor: **50%**.
+
+`pyproject.toml` is authoritative for the normal coverage threshold. The active quality roadmap ratchets the enforced floor to 55% and then 60% using focused tests around high-risk low-coverage modules.
 
 ## CI
 
-GitHub Actions `CI` workflow runs two independent matrices:
+GitHub Actions `CI` workflow contains:
 
-- verify,
-- smoke.
-
-Each matrix covers:
+### Verify matrix
 
 - `ubuntu-latest`,
 - `windows-latest`,
 - Python 3.12,
 - Python 3.14.
+
+### Canonical coverage job
+
+- `ubuntu-latest`,
+- Python 3.12,
+- `python scripts/dev.py coverage`,
+- threshold inherited from `pyproject.toml`.
+
+### Smoke matrix
+
+The same Ubuntu/Windows × Python 3.12/3.14 matrix runs bounded/offline-safe startup smoke checks.
 
 A separate `Package` workflow validates wheel build/install/entry points for package-relevant changes. It is path-filtered, so documentation-only PRs do not trigger it. When Package is applicable and triggered, it must be green on the exact PR head before merge.
 
@@ -129,6 +146,12 @@ A separate `Package` workflow validates wheel build/install/entry points for pac
 
 The active roadmap includes a clearer acceptance matrix for Windows, WSL/Linux, Linux native, and macOS Apple Silicon.
 
-## Known Stack Risk
+## Known Stack Risks
 
-The most important external-format risk is Ollama registry HTML scraping. BeautifulSoup itself is not the problem; the contract depends on a third-party page structure that can change without API-version guarantees. Parser fixture coverage and structural-failure detection are P1 roadmap work.
+### Uneven coverage distribution
+
+Aggregate coverage is 63%, but several consequential modules are much lower: `downloads/runner.py` 24%, `app/modals.py` 25%, `tui_app.py` 38%, `core/hardware.py` 44%, and download API/client paths around 46%. This is why the first enforced floor is 50% rather than immediately matching the aggregate baseline.
+
+### Ollama registry HTML dependency
+
+The most important external-format risk remains Ollama registry HTML scraping. BeautifulSoup itself is not the problem; the contract depends on a third-party page structure that can change without API-version guarantees. Parser fixture coverage and structural-failure detection are P1 roadmap work.
