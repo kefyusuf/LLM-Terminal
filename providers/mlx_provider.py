@@ -69,6 +69,8 @@ class MLXProvider(BaseProvider):
         structured_errors: list[ProviderError] = []
 
         for cache_path in _MLX_CACHE_PATHS:
+            if len(results) >= limit:
+                break
             if not cache_path.exists():
                 continue
 
@@ -146,7 +148,7 @@ class MLXProvider(BaseProvider):
         return SearchResult(
             results=results,
             errors=errors,
-            has_more_pages=len(results) > limit,
+            has_more_pages=False,
             structured_errors=structured_errors,
         )
 
