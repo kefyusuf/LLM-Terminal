@@ -9,7 +9,6 @@ Provides a unified provider architecture with:
 
 from __future__ import annotations
 
-from contextlib import suppress
 from abc import ABC, abstractmethod
 from loguru import logger
 from typing import Any
@@ -113,15 +112,14 @@ def _get_mlx_provider():
 
 
 def get_all_provider_classes() -> list[type]:
-    """Return all available provider classes (may fail on non-matching platforms).
+    """Return importable provider classes while containing dependency failures.
 
-    Note: returns a mix of :class:`BaseProvider` subclasses and
-    duck-typed providers (HuggingFaceProvider, OllamaProvider) that
-    expose the same interface (``slug``, ``display_name``,
-    ``detect()``, ``search()``, ``list_installed()``,
-    ``search_with_installed()``).
+    Provider modules are platform-safe at import time; runtime/platform
+    availability belongs in ``detect()``. A missing dependency is contained so
+    other providers remain usable, while unexpected import-time programming
+    errors propagate instead of silently removing a provider from the registry.
     """
-    providers = []
+    provider_classes = []
     for getter in [
         _get_hf_provider,
         _get_ollama_provider,
@@ -129,15 +127,24 @@ def get_all_provider_classes() -> list[type]:
         _get_docker_provider,
         _get_mlx_provider,
     ]:
-        with suppress(ImportError, Exception):
-            providers.append(getter())
-    return providers
+        try:
+            provider_classes.append(getter())
+        except ImportError:
+            logger.warning(
+                "Provider import via {} failed; skipping ({})",
+                getter.__name__,
+                "ImportError",
+            )
+    return provider_classes
 
 
 def detect_available_providers() -> dict[str, bool]:
     """Detect which providers are available on this system.
 
-    Returns a dict mapping provider slug to availability bool.
+    Returns a dict mapping provider slug to availability bool. Expected runtime
+    unavailability is handled inside provider ``detect()`` implementations.
+    Unexpected construction/detection failures remain fail-closed for optional
+    providers but are logged as warnings instead of disappearing silently.
     """
     from core.hardware import check_ollama_running
 
@@ -146,13 +153,21 @@ def detect_available_providers() -> dict[str, bool]:
         "huggingface": True,  # Always available via API
     }
 
+    built_in_slugs = {"ollama", "huggingface"}
     for provider_cls in get_all_provider_classes():
+        slug = str(getattr(provider_cls, "slug", "") or "")
         try:
             instance = provider_cls()
-            available[instance.slug] = instance.detect()
-        except Exception:
-            logger.debug("Provider {} detection failed, skipping", provider_cls.__name__)
-            pass
+            slug = str(getattr(instance, "slug", slug) or slug)
+            available[slug] = instance.detect()
+        except Exception as exc:
+            if slug and slug not in built_in_slugs:
+                available[slug] = False
+            logger.warning(
+                "Provider {} detection failed unexpectedly; treating as unavailable ({})",
+                provider_cls.__name__,
+                type(exc).__name__,
+            )
 
     return available
 
