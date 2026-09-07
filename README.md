@@ -53,6 +53,7 @@ The TUI/orchestrator preserves this metadata internally. REST exposes it directl
 - Dynamic quantization planning.
 - Token/sec estimation from GPU memory bandwidth.
 - NVIDIA, AMD, Apple Silicon, Intel and CPU fallback detection paths.
+- NVIDIA detection commits availability/state only after a complete NVML probe, so partial probe failures cannot create a false CUDA result or suppress later vendor fallbacks.
 - Multi-GPU-aware hardware snapshots where platform tooling exposes the required data.
 
 ### Plan Mode & Comparison
@@ -132,7 +133,7 @@ Use a supported Python 3.10-3.14 interpreter for bootstrap. On Windows that can 
 
 `scripts/dev.py verify` runs the required local checks: pytest, import smoke and Ruff.
 
-`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 lane now measures **66.59% total coverage** (`5043` statements, `1685` missed) and enforces a **60%** merge floor. Focused deterministic tests raised `downloads/runner.py` from **24% to 90%** and `downloads/service_client.py` from **46% to 90%** without changing production behavior. The staged 50% → 55% → 60% coverage ratchet is complete; future increases should remain evidence-driven and must not rely on production-code exclusions.
+`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 lane now measures **67.40% total coverage** (`5095` statements, `1661` missed) and enforces a **60%** merge floor. Focused deterministic tests raised `downloads/runner.py` from **24% to 90%**, `downloads/service_client.py` from **46% to 90%**, and `core/hardware.py` from **44% to 52%** while pinning concrete correctness contracts. The staged 50% → 55% → 60% coverage ratchet is complete; future increases should remain evidence-driven and must not rely on production-code exclusions.
 
 `scripts/dev.py smoke` runs bounded/offline-safe smoke checks for the CLI, REST API, TUI startup path and download service.
 
@@ -274,11 +275,10 @@ The active post-hardening roadmap is in `.planning/roadmap.md`.
 
 Current priorities:
 
-1. residual silent-failure audit,
-2. Ollama registry parser resilience and structured-source research,
-3. safer incremental TUI DataTable updates,
-4. explicit Windows/WSL/Linux/macOS Apple Silicon acceptance matrix,
-5. targeted tests for consequential weak modules as concrete changes require them.
+1. Ollama registry parser resilience and structured-source research,
+2. safer incremental TUI DataTable updates,
+3. explicit Windows/WSL/Linux/macOS Apple Silicon acceptance matrix,
+4. targeted tests for consequential weak modules as concrete changes require them.
 
 Documentation maintenance rules are in `docs/maintenance.md`.
 

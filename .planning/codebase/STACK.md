@@ -102,15 +102,16 @@ python scripts/dev.py smoke
 
 The verify suite contains **600+ tests**. Coverage is measured separately so the four-way cross-platform verify matrix is not burdened with redundant coverage execution.
 
-Canonical coverage evidence from PR #71:
+Current canonical coverage evidence:
 
 - environment: Ubuntu / Python 3.12,
-- measured total: **66.59%**,
-- statements: `5043`,
-- missed: `1685`,
+- measured total: **67.40%**,
+- statements: `5095`,
+- missed: `1661`,
 - enforced floor: **60%**,
 - `downloads/runner.py`: **90%**, up from 24%,
-- `downloads/service_client.py`: **90%**, up from 46%.
+- `downloads/service_client.py`: **90%**, up from 46%,
+- `core/hardware.py`: **52%**, up from 44% after atomic NVIDIA probe coverage.
 
 `pyproject.toml` is authoritative for the normal coverage threshold. The staged **50% → 55% → 60%** ratchet is complete. Future increases should follow concrete risk reduction rather than percentage-only work.
 
@@ -146,13 +147,15 @@ A separate `Package` workflow validates wheel build/install/entry points for pac
 - **Docker Model Runner:** local `/models` API.
 - **MLX:** macOS/Apple-Silicon detection plus local cache scanning.
 
+Hardware detection is fail-soft across platform tooling. NVIDIA probes try `nvidia_smi` then `pynvml`; state is committed only after a complete backend probe, preventing partial NVML failures from leaving a false CUDA result. AMD/Apple/Intel command probes use bounded platform-specific exception handling and fall through when tooling is absent.
+
 The active roadmap includes a clearer acceptance matrix for Windows, WSL/Linux, Linux native, and macOS Apple Silicon.
 
 ## Known Stack Risks
 
 ### Uneven coverage distribution
 
-Aggregate coverage is now 66.59%; download runner and service-client lifecycle seams are both 90%. Remaining consequential low-coverage modules include `app/modals.py` 25%, `app/viewer.py` 35%, `tui_app.py` 38%, `core/hardware.py` 44%, and `downloads/api.py` 46%. Treat these as targets when concrete work touches them, not as a perpetual percentage-only backlog.
+Aggregate coverage is now 67.40%; download runner and service-client lifecycle seams are both 90%. Remaining consequential lower-coverage modules include `app/modals.py` 25%, `tui_app.py` 38%, `downloads/api.py` 46%, `core/hardware.py` 52%, and `app/viewer.py` 57%. Treat these as targets when concrete work touches them, not as a perpetual percentage-only backlog.
 
 ### Ollama registry HTML dependency
 
