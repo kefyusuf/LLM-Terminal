@@ -26,6 +26,7 @@ The following items from the old roadmap are already implemented and should not 
 - Shared `requests.Session` pooling plus retry/backoff for retryable GET failures.
 - Structured provider diagnostics via `ProviderError`, preserved through provider results and orchestration.
 - Structured/legacy diagnostic containment for Hugging Face, Ollama, LM Studio, Docker Model Runner, and MLX search paths.
+- Provider registry lazy imports contain expected `ImportError` with warnings, unexpected import-time programming failures propagate, and unexpected optional-provider detection failures fail closed with warnings.
 - REST `/api/v1/models` additive `errors` and `structured_errors` output.
 - CLI provider diagnostics on stderr while preserving script-safe JSON stdout.
 - Search cancellation and provider-authoritative pagination handling.
@@ -62,7 +63,6 @@ Audit remaining broad exception/suppression boundaries and classify each as one 
 
 Initial targets:
 
-- provider registry import/detection suppression,
 - `app/viewer.py` selector synchronization fallback,
 - remaining download action fallbacks after polling and `DownloadManager.sync_jobs()` hardening,
 - platform hardware probes.
@@ -145,7 +145,6 @@ Address these only after P1 work unless a concrete user-facing defect is found:
 - MLX `list_installed()` filesystem I/O containment parity with MLX search.
 - LM Studio metadata helper response-shape containment if/when it has a production caller.
 - Docker/LM Studio/MLX limit and installed-list edge cases not reachable through current user-facing limits.
-- Provider registry diagnostics/observability improvements.
 - Further type tightening around provider duck-typed interfaces.
 
 ## P3 — Maintainability and Product Work

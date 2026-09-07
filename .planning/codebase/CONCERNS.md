@@ -98,12 +98,13 @@ Result refresh still uses `DataTable.clear()` in normal/structural refresh paths
 
 Broad catches are no longer the system-wide default, but some best-effort paths still use them, for example:
 
-- provider registry import/detection suppression,
 - provider-selector widget synchronization fallback,
 - remaining download action fallbacks outside periodic polling and `DownloadManager.sync_jobs()`,
 - platform hardware probes.
 
-Periodic timer-driven download polling and action-triggered `DownloadManager.sync_jobs()` are no longer silent broad-catch paths: expected service failures preserve last-known state and surface a diagnostic, while unexpected programming failures propagate.
+Provider registry lazy imports and detection are no longer silent suppression paths: expected missing imports are contained with warnings, unexpected import-time programming failures propagate, unexpected optional-provider construction/detection failures fail closed with warnings, and built-in Ollama/Hugging Face fallback availability is preserved when their dynamic detection raises unexpectedly.
+
+Periodic timer-driven download polling and action-triggered `DownloadManager.sync_jobs()` are also no longer silent broad-catch paths: expected service failures preserve last-known state and surface a diagnostic, while unexpected programming failures propagate.
 
 **Risk:** a broad catch can become a silent false-success path if its context changes.
 
@@ -200,6 +201,7 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **No formal provider errors:** resolved by `ProviderError` + `SearchResult.structured_errors`.
 - **Sequential provider search:** resolved by `SearchOrchestrator` parallel fan-out.
 - **No search cancellation:** resolved by orchestrator cancellation polling/UI search IDs.
+- **Provider registry silent suppression:** lazy imports now contain only expected `ImportError` with warnings; unexpected import-time programming failures propagate, and unexpected optional-provider detection failures fail closed with warnings.
 - **SQLite connection per operation:** resolved for metadata cache by shared locked connection.
 - **Download service single worker:** resolved by bounded configurable worker pool.
 - **Duplicate model-size estimator:** `core.utils` delegates to canonical MoE-aware estimator.
