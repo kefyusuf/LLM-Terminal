@@ -27,7 +27,6 @@ from downloads.download_status import (
     state_markup_from_state_and_label,
 )
 from downloads.service_client import (
-    SERVICE_REQUEST_ERRORS,
     cancel_job,
     create_job,
     delete_job,
@@ -35,6 +34,7 @@ from downloads.service_client import (
     get_active_download_debug,
     get_service_health,
     list_jobs,
+    SERVICE_REQUEST_ERRORS,
 )
 from providers.capabilities import get_all_provider_capabilities
 
