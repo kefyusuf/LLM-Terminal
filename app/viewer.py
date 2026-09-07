@@ -93,6 +93,13 @@ class AIModelViewer(BaseAIModelViewer):
             return
         self._apply_provider_filter(str(event.value), sync_widget=False)
 
+    def _apply_download_poll_snapshot(self, jobs, debug, health):
+        """Apply the base snapshot and surface deduplicated poll status transitions."""
+        super()._apply_download_poll_snapshot(jobs, debug, health)
+        status_message = self.dl.take_poll_status_message()
+        if status_message:
+            self.update_status(status_message)
+
     def _compact_chip_text(self, shown_count: int, total: int) -> str:
         """Render compact search state using a provider-specific short tag."""
         provider_short = provider_compact_tag(self.current_filter)

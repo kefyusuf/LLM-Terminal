@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+from urllib.error import URLError
 
 import pytest
 
@@ -226,6 +227,52 @@ class TestPollJobs:
         jobs, debug, _health = manager.poll_jobs()
         assert jobs == [{"target_id": "x", "status": "running"}]
         assert debug == {"count": 1}
+        assert manager.take_poll_status_message() is None
+
+    @patch("app.download_manager.list_jobs", side_effect=URLError("offline"))
+    @patch("app.download_manager.get_active_download_debug", return_value={"count": 0})
+    def test_expected_jobs_failure_surfaces_stale_status_once(
+        self, mock_debug, mock_jobs, manager
+    ):
+        jobs, debug, health = manager.poll_jobs()
+        assert jobs is None
+        assert debug == {"count": 0}
+        assert health is None
+        assert manager.take_poll_status_message() == (
+            "Download service is unavailable; showing last known download state."
+        )
+
+        manager.poll_jobs()
+        assert manager.take_poll_status_message() is None
+
+    @patch("app.download_manager.list_jobs")
+    @patch("app.download_manager.get_active_download_debug", return_value={"count": 0})
+    def test_success_after_poll_failure_surfaces_one_recovery_status(
+        self, mock_debug, mock_jobs, manager
+    ):
+        mock_jobs.side_effect = [
+            URLError("offline"),
+            [{"target_id": "x", "status": "completed"}],
+            [{"target_id": "x", "status": "completed"}],
+        ]
+
+        manager.poll_jobs()
+        assert "last known download state" in manager.take_poll_status_message()
+
+        jobs, _debug, _health = manager.poll_jobs()
+        assert jobs == [{"target_id": "x", "status": "completed"}]
+        assert manager.take_poll_status_message() == "Download service status refresh restored."
+
+        manager.poll_jobs()
+        assert manager.take_poll_status_message() is None
+
+    @patch(
+        "app.download_manager.list_jobs",
+        side_effect=AssertionError("programming bug"),
+    )
+    def test_unexpected_jobs_failure_is_not_silently_swallowed(self, mock_jobs, manager):
+        with pytest.raises(AssertionError, match="programming bug"):
+            manager.poll_jobs()
 
 
 class TestSyncJobs:

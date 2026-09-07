@@ -32,6 +32,7 @@ The following items from the old roadmap are already implemented and should not 
 - Shared SQLite cache connection with serialized access and retry-on-connection-error behavior.
 - Bounded multi-worker download service (`AIMODEL_DOWNLOAD_MAX_WORKERS`, default `2`).
 - Loopback-only download-service transport with optional bearer-token protection for non-health endpoints.
+- Periodic TUI download polling preserves last-known state on expected service failures, surfaces deduplicated stale/recovery status, and no longer swallows unexpected programming failures.
 - Platform-specific user-data locations for cache/download state and Hugging Face model files.
 - MoE-aware model-size estimation delegated to one canonical implementation.
 - Pre-built GPU bandwidth lookup instead of repeated linear scans.
@@ -62,7 +63,7 @@ Initial targets:
 
 - provider registry import/detection suppression,
 - `app/viewer.py` selector synchronization fallback,
-- download polling/update boundaries,
+- remaining download sync/action update boundaries (`DownloadManager.sync_jobs()` and action fallbacks; periodic polling is hardened),
 - platform hardware probes.
 
 The goal is not “remove every `except Exception`”; it is to eliminate unobservable failures where they can mislead users or hide correctness problems.

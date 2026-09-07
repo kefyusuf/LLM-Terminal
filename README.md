@@ -67,6 +67,7 @@ The TUI/orchestrator preserves this metadata internally. REST exposes it directl
 - Bounded parallel workers (`AIMODEL_DOWNLOAD_MAX_WORKERS`, default `2`).
 - Ollama pull and Hugging Face download paths.
 - Persistent history independent of TUI lifetime.
+- Periodic polling failures preserve the last known download state and surface deduplicated stale/recovery status instead of silently appearing current.
 - Loopback-only transport; optional bearer token for non-health service endpoints.
 
 ### REST API

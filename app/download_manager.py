@@ -37,6 +37,8 @@ from downloads.service_client import (
 )
 from providers.capabilities import get_all_provider_capabilities
 
+_DOWNLOAD_SERVICE_POLL_ERRORS = (OSError, ValueError, RuntimeError)
+
 
 def _provider_slug_for_source(source: Any) -> str | None:
     """Resolve model source text to a canonical provider slug."""
@@ -56,6 +58,22 @@ def _source_is_downloadable(source: Any) -> bool:
     if slug is None:
         return False
     return get_all_provider_capabilities()[slug].downloadable
+
+
+def _download_poll_failure_status(exc: Exception) -> str:
+    """Return a stable user-facing status for expected service poll failures."""
+    suffix = "showing last known download state."
+    if isinstance(exc, HTTPError):
+        if exc.code == 401:
+            return f"Download service authentication failed; {suffix}"
+        return f"Download service status refresh failed (HTTP {exc.code}); {suffix}"
+    if isinstance(exc, TimeoutError):
+        return f"Download service status refresh timed out; {suffix}"
+    if isinstance(exc, OSError):
+        return f"Download service is unavailable; {suffix}"
+    if isinstance(exc, ValueError):
+        return f"Download service returned invalid status data; {suffix}"
+    return f"Download service configuration rejected; {suffix}"
 
 
 class DownloadManager:
@@ -88,6 +106,8 @@ class DownloadManager:
         self.download_registry: dict[str, dict] = {}
         self.active_downloads: set[str] = set()
         self._download_poll_running = False
+        self._poll_error_status: str | None = None
+        self._pending_poll_status: str | None = None
         self.last_download_history_refresh_at = 0.0
         self.download_history_refresh_pending = False
         self.download_history_limit = history_limit
@@ -272,6 +292,23 @@ class DownloadManager:
     def set_poll_running(self, running: bool):
         self._download_poll_running = running
 
+    def _record_poll_status_transition(self, error_status: str | None) -> None:
+        """Queue one user-visible message when poll error state changes."""
+        previous = self._poll_error_status
+        self._poll_error_status = error_status
+        if error_status is not None:
+            if error_status != previous:
+                self._pending_poll_status = error_status
+            return
+        if previous is not None:
+            self._pending_poll_status = "Download service status refresh restored."
+
+    def take_poll_status_message(self) -> str | None:
+        """Consume the next deduplicated poll status message for the UI thread."""
+        message = self._pending_poll_status
+        self._pending_poll_status = None
+        return message
+
     def poll_jobs(self):
         jobs = None
         debug = None
@@ -281,14 +318,18 @@ class DownloadManager:
                 limit=self.download_history_limit,
                 timeout=self.download_poll_request_timeout,
             )
-        except Exception:
+        except _DOWNLOAD_SERVICE_POLL_ERRORS as exc:
             jobs = None
+            self._record_poll_status_transition(_download_poll_failure_status(exc))
+        else:
+            self._record_poll_status_transition(None)
+
         try:
             debug = get_active_download_debug(timeout=self.download_poll_request_timeout)
-        except Exception:
+        except _DOWNLOAD_SERVICE_POLL_ERRORS:
             try:
                 health = get_service_health(timeout=self.download_poll_request_timeout)
-            except Exception:
+            except _DOWNLOAD_SERVICE_POLL_ERRORS:
                 health = None
         return jobs, debug, health
 
