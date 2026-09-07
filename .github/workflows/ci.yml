@@ -70,11 +70,11 @@ jobs:
       - name: Bootstrap environment
         run: python scripts/dev.py bootstrap
 
-      - name: Measure coverage baseline
+      - name: Run coverage gate
         shell: bash
         run: |
           set -o pipefail
-          python scripts/dev.py coverage --fail-under 0 2>&1 | tee coverage.log
+          python scripts/dev.py coverage 2>&1 | tee coverage.log
 
       - name: Upload coverage logs
         if: failure()
