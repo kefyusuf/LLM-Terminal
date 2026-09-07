@@ -201,18 +201,10 @@ class DockerProvider(BaseProvider):
         """List installed Docker models."""
         try:
             resp = get_session().get(f"{self.host}/models", timeout=2)
-            if resp.status_code == 200:
-                data = resp.json()
-                models = (
-                    data if isinstance(data, list) else data.get("models", data.get("data", []))
-                )
-                ids = []
-                for m in models:
-                    if isinstance(m, str):
-                        ids.append(m.lower())
-                    else:
-                        ids.append(m.get("id", m.get("name", "")).lower())
-                return ids
-        except (RequestException, ValueError):
-            pass
-        return []
+            if resp.status_code != 200:
+                return []
+            model_ids = self._parse_model_ids(resp.json())
+        except (RequestException, ValueError, TypeError, AttributeError):
+            return []
+
+        return [model_id.lower() for model_id in model_ids]
