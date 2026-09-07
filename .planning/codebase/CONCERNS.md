@@ -1,9 +1,9 @@
 # Codebase Concerns
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
+**Baseline revision:** `5dd4014ef2a50ba14210da0d7b3bf675281c8586`
 
-This file lists **current, verified concerns**. It intentionally removes old mapper findings that have already been addressed, including the root `app.py` monolith claim, missing connection pooling, sequential provider search, single-worker downloads, missing search cancellation, missing REST validation, and missing structured errors.
+This file lists **current, verified concerns**. Resolved mapper findings are retained only in the historical summary so completed work is not accidentally re-planned.
 
 ## Priority 1
 
@@ -30,23 +30,38 @@ Remote Ollama discovery still fetches `ollama.com/search`/library HTML and parse
 2. structural-failure detection/diagnostics,
 3. research a supported structured registry/search source before considering migration.
 
-### 2. Coverage policy is configured but not enforced by the normal verify lane
+### 2. Aggregate coverage is healthy but uneven across high-risk modules
 
-**Area:** `pyproject.toml`, `scripts/dev.py`, CI
+**Area:** TUI, download execution/client paths, platform hardware probes
 
-`fail_under = 45` exists, but `scripts/dev.py verify` currently runs pytest/import smoke/Ruff without a coverage-enforced pytest invocation.
+A canonical Ubuntu/Python 3.12 coverage run measured **63% total coverage** (`5043` statements, `1841` missed). CI now enforces an initial **50%** floor through `python scripts/dev.py coverage`.
+
+The aggregate can still hide concentrated risk. Measured examples:
+
+- `downloads/runner.py` — 24%,
+- `app/modals.py` — 25%,
+- `app/viewer.py` — 35%,
+- `tui_app.py` — 38%,
+- `core/hardware.py` — 44%,
+- `downloads/api.py` / `downloads/service_client.py` — 46%.
 
 **Risk:**
 
-- the configured threshold can be mistaken for a real CI gate,
-- large changes can reduce coverage without the merge gate noticing,
-- the existing 600+ tests are broad but do not guarantee high-risk application boundaries are sufficiently covered.
+- aggregate coverage can remain green while consequential UI/process/platform branches are weakly exercised,
+- future changes in low-coverage modules can regress without a focused contract test.
+
+**Current mitigation:**
+
+- 50% exact-head aggregate gate,
+- 600+ deterministic tests,
+- separate verify/smoke matrices,
+- regression-test requirement for correctness fixes.
 
 **Next work:**
 
-- measure a reproducible baseline,
-- add focused high-risk tests,
-- enforce staged CI thresholds 50 → 55 → 60.
+- target consequential uncovered paths in the modules above,
+- ratchet the enforced floor to 55%, then 60%,
+- do not inflate coverage by excluding meaningful production modules or weakening assertions.
 
 ### 3. TUI result refresh still performs full table rebuilds in important paths
 
@@ -100,7 +115,8 @@ Project metadata supports Python 3.10-3.14 and integrations span Windows/Linux/m
 
 - Ubuntu + Windows,
 - Python 3.12 + 3.14,
-- offline-safe verify/smoke behavior.
+- offline-safe verify/smoke behavior,
+- canonical aggregate coverage on Ubuntu/Python 3.12.
 
 Hosted CI does not prove:
 
@@ -183,6 +199,7 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **GPU bandwidth repeated linear scan:** resolved by pre-built lookup maps.
 - **No REST input validation:** core model-search/plan inputs now validate to 400 responses.
 - **Provider failures hidden in REST/CLI:** resolved with REST diagnostics and CLI stderr warnings.
+- **Coverage configured but not enforced:** resolved by a canonical Ubuntu/Python 3.12 CI coverage job; first enforced floor is 50% against a measured 63% baseline.
 - **Legacy `shell=True` finding:** no active source match; old planning reference removed from current concerns.
 
 ## Maintenance Rule
