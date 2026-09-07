@@ -38,9 +38,11 @@ def test_expected_sync_failure_preserves_state_and_surfaces_status():
 def test_unexpected_sync_failure_is_not_silently_swallowed():
     manager = _manager()
 
-    with patch("app.download_manager.list_jobs", side_effect=AssertionError("programming bug")):
-        with pytest.raises(AssertionError, match="programming bug"):
-            manager.sync_jobs(force=True)
+    with (
+        patch("app.download_manager.list_jobs", side_effect=AssertionError("programming bug")),
+        pytest.raises(AssertionError, match="programming bug"),
+    ):
+        manager.sync_jobs(force=True)
 
 
 def test_successful_self_fetch_returns_true():
