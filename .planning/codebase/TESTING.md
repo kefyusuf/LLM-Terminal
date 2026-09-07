@@ -1,7 +1,7 @@
 # Testing and Verification
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `9d9e23bf59ca5089e287c4e98b377935699fbe97`
+**Baseline revision:** `d2c8913f3623eaaab8087a3c9d427b0a2686b375`
 
 ## Test Framework
 
@@ -10,7 +10,7 @@
 - **Default pytest args:** `-q` via `pyproject.toml`.
 - **Live external tests:** opt-in with `--run-live`.
 - **Coverage:** pytest-cov / coverage.py.
-- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider/process/state classes, and deterministic pure-function tests.
+- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider/process/state/psutil objects, and deterministic pure-function tests.
 
 ## Normal Developer Commands
 
@@ -40,24 +40,25 @@ Canonical CI coverage environment:
 - Ubuntu,
 - Python 3.12.
 
-Current measured evidence from PR #69:
+Current measured evidence from PR #71:
 
 - statements: `5043`,
-- missed: `1746`,
-- total coverage: **65.38%**,
-- `downloads/runner.py`: **90%** after focused fake-process/state execution tests.
+- missed: `1685`,
+- total coverage: **66.59%**,
+- `downloads/runner.py`: **90%**,
+- `downloads/service_client.py`: **90%**.
 
 Current enforced merge floor:
 
 ```toml
 [tool.coverage.report]
 show_missing = true
-fail_under = 55
+fail_under = 60
 ```
 
 The optional `--fail-under` argument exists for explicit measurement/debugging. `--fail-under 0` was used only to establish the original baseline and must not be used as a merge gate.
 
-The remaining planned aggregate ratchet is **60%**, backed by focused tests rather than new exclusions.
+The staged **50% → 55% → 60%** aggregate ratchet is complete. Future threshold increases should be backed by concrete risk-driven tests rather than percentage-only work or new exclusions.
 
 ### `smoke`
 
@@ -184,7 +185,7 @@ Cover store/state/lifecycle/client/runner behavior including:
 - service compatibility and client behavior,
 - runner terminal states and subprocess cancellation behavior through deterministic fake processes.
 
-`tests/test_downloads_runner_execution.py` deliberately avoids spawning real subprocesses. It pins:
+`tests/test_downloads_runner_execution.py` avoids spawning real subprocesses and pins:
 
 - Hugging Face payload validation,
 - running → completed/failed/cancelled transitions,
@@ -192,6 +193,16 @@ Cover store/state/lifecycle/client/runner behavior including:
 - streamed progress and idle heartbeat updates,
 - last-line failure details,
 - `process_job` dispatch and spawn-error containment.
+
+`tests/test_service_client_lifecycle.py` avoids starting a real background service and pins:
+
+- healthy/unreachable service probes,
+- Windows/POSIX detached launch command shapes,
+- startup retry/deadline behavior,
+- graceful shutdown and psutil fallback kill,
+- compatible-service reuse and stale-service restart,
+- public job request adapters,
+- delete-endpoint 404 restart/retry behavior.
 
 ### TUI tests
 
@@ -211,11 +222,14 @@ pytest --run-live
 
 Use live tests to validate actual external/provider behavior, not as a substitute for deterministic fixtures.
 
-## Coverage Distribution and Next Targets
+## Coverage Distribution and Future Targets
 
-Focused runner execution coverage removed one of the largest consequential gaps: `downloads/runner.py` increased from **24% to 90%** and aggregate coverage increased from 63.51% to **65.38%**.
+The staged aggregate ratchet is complete at **60% enforced / 66.59% measured**. Focused execution/lifecycle work removed two consequential weak seams:
 
-Remaining high-value low-coverage areas from the same canonical environment:
+- `downloads/runner.py`: **24% → 90%**,
+- `downloads/service_client.py`: **46% → 90%**.
+
+Remaining lower-coverage modules in the canonical environment include:
 
 | Module | Measured coverage |
 |---|---:|
@@ -224,11 +238,8 @@ Remaining high-value low-coverage areas from the same canonical environment:
 | `tui_app.py` | 38% |
 | `core/hardware.py` | 44% |
 | `downloads/api.py` | 46% |
-| `downloads/service_client.py` | 46% |
 
-Other critical seams are materially higher, including provider parsing, search orchestration, download store, and download runner execution paths.
-
-The final 60% ratchet should come from tests around consequential behavior in one or more remaining weak modules. Do not raise coverage by excluding meaningful production code, counting tests as production source, or weakening assertions.
+These are not an instruction to create percentage-only PRs. Add focused tests when a concrete correctness/resilience/platform/performance change touches them. Future aggregate gate increases should follow real risk reduction and must not exclude meaningful production code, count tests as production source, or weaken assertions.
 
 ## Regression-Test Rule
 

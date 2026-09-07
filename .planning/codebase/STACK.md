@@ -1,7 +1,7 @@
 # Technology Stack
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `9d9e23bf59ca5089e287c4e98b377935699fbe97`
+**Baseline revision:** `d2c8913f3623eaaab8087a3c9d427b0a2686b375`
 
 ## Runtime
 
@@ -102,16 +102,17 @@ python scripts/dev.py smoke
 
 The verify suite contains **600+ tests**. Coverage is measured separately so the four-way cross-platform verify matrix is not burdened with redundant coverage execution.
 
-Canonical coverage evidence from PR #69:
+Canonical coverage evidence from PR #71:
 
 - environment: Ubuntu / Python 3.12,
-- measured total: **65.38%**,
+- measured total: **66.59%**,
 - statements: `5043`,
-- missed: `1746`,
-- enforced floor: **55%**,
-- `downloads/runner.py`: **90%**, up from 24% through fake-process/state execution tests.
+- missed: `1685`,
+- enforced floor: **60%**,
+- `downloads/runner.py`: **90%**, up from 24%,
+- `downloads/service_client.py`: **90%**, up from 46%.
 
-`pyproject.toml` is authoritative for the normal coverage threshold. The active quality roadmap has one remaining aggregate ratchet: 55% → 60%, backed by focused tests around another consequential weak boundary.
+`pyproject.toml` is authoritative for the normal coverage threshold. The staged **50% → 55% → 60%** ratchet is complete. Future increases should follow concrete risk reduction rather than percentage-only work.
 
 ## CI
 
@@ -151,7 +152,7 @@ The active roadmap includes a clearer acceptance matrix for Windows, WSL/Linux, 
 
 ### Uneven coverage distribution
 
-Aggregate coverage is now 65.38% and `downloads/runner.py` is 90%, but several consequential modules remain much lower: `app/modals.py` 25%, `app/viewer.py` 35%, `tui_app.py` 38%, `core/hardware.py` 44%, and download API/client paths around 46%. These are better targets for the final 60% ratchet than further broad aggregate-only changes.
+Aggregate coverage is now 66.59%; download runner and service-client lifecycle seams are both 90%. Remaining consequential low-coverage modules include `app/modals.py` 25%, `app/viewer.py` 35%, `tui_app.py` 38%, `core/hardware.py` 44%, and `downloads/api.py` 46%. Treat these as targets when concrete work touches them, not as a perpetual percentage-only backlog.
 
 ### Ollama registry HTML dependency
 
