@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Input, Select
 
 from providers import get_provider_filter_labels
@@ -71,7 +72,7 @@ class AIModelViewer(BaseAIModelViewer):
                 selector = self.query_one("#provider-select", Select)
                 if selector.value != label:
                     selector.value = label
-            except Exception:
+            except NoMatches:
                 pass
 
         current_query = self.query_one("#search-input", Input).value.strip()
