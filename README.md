@@ -120,6 +120,7 @@ git clone https://github.com/kefyusuf/llm-terminal
 cd llm-terminal
 python scripts/dev.py bootstrap
 python scripts/dev.py verify
+python scripts/dev.py coverage
 python scripts/dev.py smoke
 ```
 
@@ -128,6 +129,8 @@ Use a supported Python 3.10-3.14 interpreter for bootstrap. On Windows that can 
 `scripts/dev.py bootstrap` creates or reuses `.venv` and installs from the committed platform-specific development lock file. Edit `requirements/requirements.in` and `requirements/requirements-dev.in` for dependency intent; bootstrap does not resolve or regenerate locks. Canonical lock maintenance remains explicit.
 
 `scripts/dev.py verify` runs the required local checks: pytest, import smoke and Ruff.
+
+`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 baseline measured **63% total coverage** (`5043` statements, `1841` missed); the first enforced merge floor is **50%**. The roadmap ratchets this floor to 55% and then 60% using focused tests rather than coverage exclusions.
 
 `scripts/dev.py smoke` runs bounded/offline-safe smoke checks for the CLI, REST API, TUI startup path and download service.
 
@@ -269,7 +272,7 @@ The active post-hardening roadmap is in `.planning/roadmap.md`.
 
 Current priorities:
 
-1. measured + CI-enforced coverage growth to 60 in stages,
+1. ratchet the enforced coverage floor from 50% to 55% and then 60% with focused high-risk tests,
 2. residual silent-failure audit,
 3. Ollama registry parser resilience and structured-source research,
 4. safer incremental TUI DataTable updates,

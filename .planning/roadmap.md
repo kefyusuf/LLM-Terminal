@@ -39,31 +39,46 @@ The following items from the old roadmap are already implemented and should not 
 - CI verify + smoke matrices on Ubuntu and Windows with Python 3.12 and 3.14.
 - More than 600 deterministic tests in the current verify lane.
 - TUI stale-search-cache fallback for disconnected/offline search recovery.
+- Canonical coverage measurement lane on Ubuntu/Python 3.12 with a first enforced 50% gate.
 
 ## P1 — Quality Baseline
 
-### Q1. Establish a measured coverage baseline and enforce it in CI
+### Q1. Ratchet measured coverage from 50% to 60%
 
-Current state:
+Measured evidence from PR #67's baseline head:
 
-- `pyproject.toml` contains `fail_under = 45`.
-- The normal `scripts/dev.py verify` lane runs tests, import smoke, and Ruff; it does **not** currently enforce a coverage threshold.
+- canonical environment: Ubuntu / Python 3.12,
+- statements: `5043`,
+- missed: `1841`,
+- total measured coverage: **63%**,
+- first enforced CI threshold: **50%**.
 
-Plan:
+The repository now exposes the same lane locally with:
 
-1. Add a reproducible coverage command/lane without changing production behavior.
-2. Record the measured baseline on Linux/Python 3.12.
-3. Add focused tests for low-coverage, high-risk paths before changing the gate.
-4. Raise the enforced threshold in stages: **50 → 55 → 60**.
-5. Do not reach targets by excluding meaningful production modules or weakening assertions.
+```bash
+python scripts/dev.py coverage
+```
 
-Priority coverage targets:
+The CI coverage job is intentionally single-environment rather than duplicated across the full verify matrix. The normal command uses `pyproject.toml`'s configured threshold; `--fail-under 0` exists only for explicit baseline measurement and must not be used as the merge gate.
 
-- TUI search/application boundaries and state transitions.
-- Download service runner/store/cancellation/version-compatibility paths.
-- Provider error/parse/retry boundaries.
-- Platform-specific hardware detection fallbacks.
-- REST and CLI public contracts.
+Next stages:
+
+1. keep **50%** as the first stable enforced floor,
+2. add focused tests for high-risk low-coverage paths,
+3. ratchet to **55%** with exact-head evidence,
+4. ratchet to **60%** with exact-head evidence,
+5. do not reach targets by excluding meaningful production modules or weakening assertions.
+
+Priority coverage targets from the measured report:
+
+- `downloads/runner.py` — 24%,
+- `app/modals.py` — 25%,
+- `tui_app.py` — 38%,
+- `core/hardware.py` — 44%,
+- `downloads/api.py` / `downloads/service_client.py` — 46%,
+- CLI and other user-facing public contracts where uncovered paths are consequential.
+
+The aggregate already exceeds 60%; staged thresholds are deliberately lower than the observed baseline so coverage becomes a stable merge floor before being tightened around high-risk modules.
 
 ### Q2. Residual silent-failure audit
 
