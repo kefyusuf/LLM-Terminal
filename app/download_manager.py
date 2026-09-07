@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.error import HTTPError
 
+from downloads import service_client
 from downloads.download_history import (
     action_label_for_entry,
 )
@@ -26,21 +27,10 @@ from downloads.download_status import (
     map_service_job_status,
     state_markup_from_state_and_label,
 )
-from downloads.service_client import (
-    SERVICE_REQUEST_ERRORS,
-
-    cancel_job,
-    create_job,
-    delete_job,
-    ensure_service_running,
-    get_active_download_debug,
-    get_service_health,
-    list_jobs,
-)
 from providers.capabilities import get_all_provider_capabilities
 
 
-_DOWNLOAD_SERVICE_POLL_ERRORS = SERVICE_REQUEST_ERRORS
+_DOWNLOAD_SERVICE_POLL_ERRORS = service_client.SERVICE_REQUEST_ERRORS
 
 
 def _provider_slug_for_source(source: Any) -> str | None:
@@ -166,7 +156,7 @@ class DownloadManager:
     def sync_jobs(self, force=False, jobs=None):
         if jobs is None:
             try:
-                jobs = list_jobs(
+                jobs = service_client.list_jobs(
                     limit=self.download_history_limit,
                     timeout=self.download_poll_request_timeout,
                 )
@@ -317,7 +307,7 @@ class DownloadManager:
         debug = None
         health = None
         try:
-            jobs = list_jobs(
+            jobs = service_client.list_jobs(
                 limit=self.download_history_limit,
                 timeout=self.download_poll_request_timeout,
             )
@@ -328,10 +318,12 @@ class DownloadManager:
             self._record_poll_status_transition(None)
 
         try:
-            debug = get_active_download_debug(timeout=self.download_poll_request_timeout)
+            debug = service_client.get_active_download_debug(
+                timeout=self.download_poll_request_timeout
+            )
         except _DOWNLOAD_SERVICE_POLL_ERRORS:
             try:
-                health = get_service_health(timeout=self.download_poll_request_timeout)
+                health = service_client.get_service_health(timeout=self.download_poll_request_timeout)
             except _DOWNLOAD_SERVICE_POLL_ERRORS:
                 health = None
         return jobs, debug, health
@@ -339,7 +331,7 @@ class DownloadManager:
     def cancel_download(self, model):
         target_id = download_target_id(model)
         try:
-            response = cancel_job(target_id)
+            response = service_client.cancel_job(target_id)
             _ = response.get("job")
             return True, f"Cancel requested: {model.get('name', target_id)}"
         except HTTPError as exc:
@@ -352,11 +344,11 @@ class DownloadManager:
         if not _source_is_downloadable(source):
             label = str(source or "this provider").strip() or "this provider"
             return False, f"Downloads are not supported for {label}."
-        if not ensure_service_running():
+        if not service_client.ensure_service_running():
             return False, "Download service is unavailable."
         target_id = download_target_id(model)
         try:
-            response = create_job(model)
+            response = service_client.create_job(model)
             queued = bool(response.get("queued"))
             if queued:
                 return True, f"Download queued: {model.get('name', target_id)}"
@@ -373,7 +365,7 @@ class DownloadManager:
 
         if should_cancel_before_delete(delete_data, state):
             try:
-                cancel_job(target_id)
+                service_client.cancel_job(target_id)
                 time.sleep(1)
                 messages.append(f"Download canceled: {model_name}")
             except Exception as e:
@@ -408,7 +400,7 @@ class DownloadManager:
                 messages.append(f"Delete model data error: {e!s}")
 
         try:
-            delete_job(target_id)
+            service_client.delete_job(target_id)
         except HTTPError as exc:
             return False, delete_error_detail_from_http_error(exc), None, None
         except Exception as exc:
