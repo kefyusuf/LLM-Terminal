@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from typing import Any
-from urllib import error as urllib_error
+from urllib.error import HTTPError
 
 from downloads.download_history import (
     action_label_for_entry,
@@ -27,6 +27,7 @@ from downloads.download_status import (
     state_markup_from_state_and_label,
 )
 from downloads.service_client import (
+    SERVICE_REQUEST_ERRORS,
     cancel_job,
     create_job,
     delete_job,
@@ -38,13 +39,7 @@ from downloads.service_client import (
 from providers.capabilities import get_all_provider_capabilities
 
 
-_DOWNLOAD_SERVICE_POLL_ERRORS = (
-    urllib_error.HTTPError,
-    urllib_error.URLError,
-    TimeoutError,
-    ValueError,
-    RuntimeError,
-)
+_DOWNLOAD_SERVICE_POLL_ERRORS = SERVICE_REQUEST_ERRORS
 
 
 def _provider_slug_for_source(source: Any) -> str | None:
@@ -70,13 +65,13 @@ def _source_is_downloadable(source: Any) -> bool:
 def _download_poll_failure_status(exc: Exception) -> str:
     """Return a stable user-facing status for expected service poll failures."""
     suffix = "showing last known download state."
-    if isinstance(exc, urllib_error.HTTPError):
+    if isinstance(exc, HTTPError):
         if exc.code == 401:
             return f"Download service authentication failed; {suffix}"
         return f"Download service status refresh failed (HTTP {exc.code}); {suffix}"
     if isinstance(exc, TimeoutError):
         return f"Download service status refresh timed out; {suffix}"
-    if isinstance(exc, urllib_error.URLError):
+    if isinstance(exc, OSError):
         return f"Download service is unavailable; {suffix}"
     if isinstance(exc, ValueError):
         return f"Download service returned invalid status data; {suffix}"
@@ -346,7 +341,7 @@ class DownloadManager:
             response = cancel_job(target_id)
             _ = response.get("job")
             return True, f"Cancel requested: {model.get('name', target_id)}"
-        except urllib_error.HTTPError as exc:
+        except HTTPError as exc:
             return False, cancel_error_detail_from_http_error(exc)
         except Exception:
             return False, "Failed to cancel download through service."
@@ -413,7 +408,7 @@ class DownloadManager:
 
         try:
             delete_job(target_id)
-        except urllib_error.HTTPError as exc:
+        except HTTPError as exc:
             return False, delete_error_detail_from_http_error(exc), None, None
         except Exception as exc:
             return False, f"Failed to delete download entry: {exc}", None, None
