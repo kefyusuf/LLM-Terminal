@@ -1,115 +1,134 @@
 # Technology Stack
 
-**Analysis Date:** 2026-06-09
-
-## Languages
-
-**Primary:**
-- Python >=3.10 — All application code, from TUI to download service to API server
-
-**Secondary:**
-- CSS (Textual TCSS) — `terminal_ui/theme.tcss` for styling the legacy Obsidian Console widget
+**Baseline date:** 2026-09-07  
+**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
 
 ## Runtime
 
-**Environment:**
-- CPython 3.10+ (required by `pyproject.toml`)
+- **Language:** Python 3.10-3.14 supported by project metadata.
+- **CI verification:** Ubuntu + Windows on Python 3.12 and 3.14.
+- **Primary UI:** Textual.
+- **CLI:** Click + Rich.
+- **Configuration:** Pydantic Settings.
+- **Packaging:** setuptools via `pyproject.toml`.
 
-**Package Manager:**
-- pip (via `requirements.in` / `requirements.txt`)
-- pip-compile (via `requirements/*.in` -> `requirements/*.txt`)
-- Lockfile: `requirements.txt`, `requirements-dev.txt`, plus platform-specific variants in `requirements/`
-- Virtual envs detected: `.venv/`, `.venv314/`, `.venv.py313-broken/`
+## Core Runtime Dependencies
 
-## Frameworks
+| Package | Declared range | Purpose |
+|---|---|---|
+| `textual` | `>=0.86,<1.0` | Textual TUI |
+| `rich` | `>=13.9,<14.0` | CLI/table/markup rendering |
+| `click` | `>=8.0,<9.0` | CLI framework |
+| `pydantic-settings` | `>=2.0,<3.0` | Environment/config loading |
+| `requests` | `>=2.32,<3.0` | Requests-based provider HTTP traffic |
+| `huggingface_hub` | `>=0.27,<1.0` | Hugging Face search/download APIs |
+| `beautifulsoup4` | `>=4.12,<5.0` | Ollama registry HTML parsing |
+| `psutil` | `>=5.9,<7.0` | CPU/RAM/process inspection |
+| `nvidia-ml-py` | `>=12.560,<13.0` | NVIDIA GPU/VRAM detection |
+| `loguru` | `>=0.7,<1.0` | Local logging |
+| `pyperclip` | `>=1.8,<2.0` | Clipboard integration |
+| `platformdirs` | `>=4.0,<5.0` | OS-specific user-data paths |
 
-**Core:**
-- **Textual** `>=0.86,<1.0` — Terminal UI framework powering the main `AIModelViewer` app in `app.py` (2466 LOC)
-- **Rich** `>=13.9,<14.0` — Terminal formatting, used in `cli.py` for tables and markup
-- **Click** `>=8.0,<9.0` — CLI framework in `cli.py` (8 commands: info, system, search, fit, recommend, plan, scores, cache-clear, cache-stats, version)
-- **Pydantic Settings** `>=2.0,<3.0` — `config.py` `Settings` class with `.env` support via `AIMODEL_` prefix
+Exact development/runtime lock versions live in committed platform lock files under `requirements/` and may be narrower than the project dependency ranges above.
 
-**Web/HTTP:**
-- **requests** `>=2.32,<3.0` — HTTP client for HuggingFace API, Ollama registry scraping, LM Studio/Docker APIs
-- **urllib** (stdlib) — HTTP client for download service (`service_client.py`) and API server
-- **http.server** (stdlib) — HTTP server for download service (`downloads/download_service.py`) and REST API (`api_server.py`)
+## HTTP and Service Stack
 
-**Scraping:**
-- **BeautifulSoup4** `>=4.12,<5.0` — HTML parsing for `ollama.com` library page scraping
+### Provider HTTP
 
-**Data & ML Integration:**
-- **huggingface_hub** `>=0.27,<1.0` — HuggingFace API for model search and download
-- **nvidia-ml-py** `>=12.560,<13.0` — NVIDIA GPU detection (VRAM, GPU name)
+`core/http_client.py` owns a shared `requests.Session` for requests-based providers. It supplies connection reuse plus retry/backoff for retryable GET failures such as 429 and common 5xx responses.
 
-**System/Hardware:**
-- **psutil** `>=5.9,<7.0` — CPU, RAM, process monitoring with graceful fallback
+Hugging Face integration also uses `huggingface_hub.HfApi`/Hub tooling where appropriate.
 
-**Other:**
-- **loguru** `>=0.7,<1.0` — Structured logging (`core/logging_.py`)
-- **pyperclip** `>=1.8,<2.0` — Clipboard integration for copy-command feature
+### Local HTTP Services
 
-**Testing:**
-- **pytest** (via `[tool.pytest.ini_options]`) — 34 test files, 3172 lines
-- **coverage** — `fail_under = 40`
+The project deliberately uses stdlib HTTP servers rather than a web framework:
 
-**Linting/Formatting:**
-- **Ruff** — Linter + formatter, target `py310`, line-length `100`
-  - Rules: E, W, F, I, UP, B, C4, SIM, RUF
-  - Isort: known-first-party for app modules
-- **Mypy** — Static type checking, `strict = false`, `ignore_missing_imports = true`
+- download service: `http.server` on loopback, default port 8765,
+- REST API: `http.server` on loopback, default port 8787.
 
-## Key Dependencies
+The download service can require a bearer token for non-health endpoints and rejects non-loopback hosts until TLS transport exists.
 
-**Critical:**
-| Package | Version | Why It Matters |
-|---------|---------|----------------|
-| `textual` | >=0.86,<1.0 | Entire TUI depends on it. 0.x maturity — API churn risk |
-| `huggingface_hub` | >=0.27,<1.0 | Primary model source. Search + download both depend on it |
-| `requests` | >=2.32,<3.0 | Ubiquitous HTTP client across all providers and web scraping |
+## Persistence
 
-**Infrastructure:**
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `psutil` | >=5.9,<7.0 | Hardware monitoring with graceful `ImportError` fallback |
-| `nvidia-ml-py` | >=12.560 | NVIDIA VRAM / GPU detection |
-| `beautifulsoup4` | >=4.12 | Ollama.com HTML scraping |
-| `pydantic-settings` | >=2.0 | Type-safe configuration |
-| `loguru` | >=0.7 | Structured logging with rotation |
-| `pyperclip` | >=1.8 | Model command copy to clipboard |
-| `click` | >=8.0 | CLI framework |
+### Metadata Cache
 
-## Configuration
+- SQLite (`core/cache_db.py`).
+- Shared process-level connection guarded by an `RLock`.
+- Reopens when configured path changes or after SQLite connection errors.
+- Stores model metadata and hardware snapshots.
 
-**Environment:**
-- `.env` file with `AIMODEL_` prefix (managed by Pydantic Settings in `config.py`)
-- `AIMODEL_HF_TOKEN` — HuggingFace API token (optional, increases rate limits)
-- `AIMODEL_HF_SEARCH_LIMIT` — Results per page (default 15)
-- `AIMODEL_HF_SEARCH_MAX_PAGES` — Max pages to fetch (default 10)
-- `AIMODEL_OLLAMA_API_BASE` — Ollama server URL (default `http://localhost:11434`)
-- `AIMODEL_OLLAMA_TIMEOUT` — Ollama request timeout (default 5s)
-- `AIMODEL_SEARCH_CACHE_TTL_SECONDS` — Cache TTL (default 90s)
-- `AIMODEL_SEARCH_CACHE_MAX_ENTRIES` — Max cache entries (default 20)
+### Download State
 
-**Build:**
-- `pyproject.toml` — Build config, ruff, mypy, pytest, coverage all configured here
-- `requirements/requirements.in` — Base deps
-- `requirements/requirements-dev.in` — Dev deps
-- Platform-specific `requirements-linux.txt` and `requirements-windows.txt`
+- SQLite store owned by the background download service.
+- Persists queued/running/completed/cancelled/failed job state independently of TUI lifetime.
 
-## Platform Requirements
+### Search Cache
 
-**Development:**
-- Python >= 3.10
-- pip + virtualenv
-- A HuggingFace token (optional, but recommended for rate limits)
-- Ollama (optional, for local model runtime features)
-- NVIDIA GPU with CUDA (optional, for accelerated inference)
+- In-memory `SearchCache`.
+- Hardware-aware invalidation.
+- Supports stale-entry lookup used by the TUI as an offline/disconnected fallback.
 
-**Production:**
-- Run as a terminal application (TUI) or CLI
-- Background download service process (launched automatically)
-- Can be accessed programmatically via REST API on port 8787
+Default persistent paths use OS-specific per-user application-data directories.
 
----
+## Concurrency
 
-*Stack analysis: 2026-06-09*
+- Textual background workers for UI-safe long-running operations.
+- `SearchOrchestrator` uses a bounded `ThreadPoolExecutor` for parallel provider search.
+- Download service uses a bounded `ThreadPoolExecutor`; default max workers: 2.
+- SQLite cache access is serialized with locks.
+- Download-store/process state has its own locking/coordination.
+
+## Development Tooling
+
+### Bootstrap and Locks
+
+Canonical workflow:
+
+```bash
+python scripts/dev.py bootstrap
+python scripts/dev.py verify
+python scripts/dev.py smoke
+```
+
+`bootstrap` installs from committed platform-specific development locks. Dependency intent belongs in `requirements/requirements.in` and `requirements/requirements-dev.in`; lock regeneration is an explicit maintenance operation rather than part of normal bootstrap.
+
+### Verification
+
+- **pytest** — main test runner.
+- **Ruff** — lint/import/static style checks.
+- **Mypy** — configured, non-strict static typing; not the primary merge gate.
+- **coverage / pytest-cov** — available in dev locks.
+
+The current verify lane contains **600+ tests** (603 observed on the 2026-09-07 PR #63 Ubuntu/Python 3.12 verify job).
+
+`pyproject.toml` currently sets `fail_under = 45`, but `scripts/dev.py verify` does not run a coverage-enforced lane. Establishing and enforcing a measured staged coverage target is active P1 roadmap work.
+
+## CI
+
+GitHub Actions `CI` workflow runs two independent matrices:
+
+- verify,
+- smoke.
+
+Each matrix covers:
+
+- `ubuntu-latest`,
+- `windows-latest`,
+- Python 3.12,
+- Python 3.14.
+
+The separate `Package` workflow is also required before the project's normal merge process considers a PR green.
+
+## Platform Integrations
+
+- **Ollama:** local API plus remote HTML registry search.
+- **Hugging Face:** hosted API/Hub plus local downloads.
+- **LM Studio:** local `/v1/models` API.
+- **Docker Model Runner:** local `/models` API.
+- **MLX:** macOS/Apple-Silicon detection plus local cache scanning.
+
+The active roadmap includes a clearer acceptance matrix for Windows, WSL/Linux, Linux native, and macOS Apple Silicon.
+
+## Known Stack Risk
+
+The most important external-format risk is Ollama registry HTML scraping. BeautifulSoup itself is not the problem; the contract depends on a third-party page structure that can change without API-version guarantees. Parser fixture coverage and structural-failure detection are P1 roadmap work.

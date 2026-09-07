@@ -1,122 +1,174 @@
 # External Integrations
 
-**Analysis Date:** 2026-06-09
+**Baseline date:** 2026-09-07  
+**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
 
-## APIs & External Services
+## Provider Integrations
 
-**Model Search Providers (3rd-party APIs):**
-| Service | Usage | Client | Auth |
-|---------|-------|--------|------|
-| HuggingFace API | Search GGUF models, fetch metadata, download | `huggingface_hub.HfApi` (`providers/hf_provider.py:118`) | `AIMODEL_HF_TOKEN` env var (optional, for rate limits) |
-| Ollama Registry | Scrape model library pages for search results | `requests` + BeautifulSoup (`providers/ollama_provider.py:219-238`) | None (anonymous web scraping) |
-| Ollama Local API | List installed models (`GET /api/tags`) | `requests` (`providers/ollama_provider.py:37`) | None (localhost only) |
+| Provider | Remote/local source | Client | Authentication | Notes |
+|---|---|---|---|---|
+| Hugging Face | Hub API/search/download | `huggingface_hub` + requests paths | `AIMODEL_HF_TOKEN` (with `HF_TOKEN` fallback) | Hosted provider; retry/structured errors supported |
+| Ollama registry | `ollama.com` search/library HTML | shared `requests.Session` + BeautifulSoup | None | Main external-format fragility; HTML structure is not versioned API |
+| Ollama local runtime | `/api/tags` on configured Ollama base | shared `requests.Session` | None by default | Installed-model/runtime detection |
+| LM Studio | local `/v1/models` | shared `requests.Session` | None by default | Local provider, parse/error containment |
+| Docker Model Runner | local `/models` | shared `requests.Session` | None by default | Local provider, parse/error containment |
+| MLX | local platform/cache filesystem | stdlib/platform/filesystem | N/A | macOS Apple Silicon + cache scanning |
 
-**Local Runtime Detection:**
-| Service | Port | Detection Method |
-|---------|------|-----------------|
-| Ollama | 11434 (default) | psutil process scan + HTTP `/api/tags` |
-| LM Studio | 1234 (default) | HTTP `GET /v1/models` (`providers/lmstudio_provider.py:39`) |
-| Docker Model Runner | 12434 (default) | HTTP `GET /models` (`providers/docker_provider.py:39`) |
-| MLX | Local filesystem | `sysctl hw.optional.arm64` + cache dir scan (`providers/mlx_provider.py:47-54`) |
+## Shared Provider HTTP Behavior
+
+Requests-based providers use `core/http_client.py` rather than opening a new connection for every call.
+
+The shared session provides:
+
+- HTTP connection reuse,
+- bounded retry/backoff for retryable GET failures,
+- retry support for 429 and selected 5xx responses.
+
+Providers still own semantic parsing and stable error classification. A transport retry is not a substitute for provider-level parse/contract handling.
+
+## Search Integration Model
+
+The Textual search path uses `SearchOrchestrator` to fan out selected providers in parallel and fan results back in deterministic order.
+
+Provider diagnostics are preserved as:
+
+- human-readable `errors`,
+- machine-readable `ProviderError` values in `structured_errors`.
+
+The TUI may use stale `SearchCache` entries when a live search fails and a matching stale entry exists, providing a limited offline/disconnected fallback.
+
+## REST API
+
+Default address: `127.0.0.1:8787`.
+
+Endpoints include:
+
+- `GET /health`,
+- `GET /api/v1/system`,
+- `GET /api/v1/models`,
+- `GET /api/v1/models/top`,
+- `GET /api/v1/models/{name}/plan`,
+- `GET /api/v1/scores/{name}`,
+- `GET /api/v1/providers`.
+
+### REST model provider scope
+
+`/api/v1/models` currently supports:
+
+- Ollama,
+- Hugging Face.
+
+LM Studio, Docker Model Runner and MLX remain visible in canonical provider descriptors but are not automatically exposed as REST model-search providers.
+
+### Diagnostics
+
+Successful REST model responses include additive:
+
+- `errors`,
+- `structured_errors`.
+
+Provider failures can coexist with partial models in a 200 response. This lets callers distinguish “zero matching models” from “one provider failed” without breaking existing partial-success behavior.
+
+`structured_errors` preserves provider, stable code, message, retryability, optional HTTP status and optional retry-after metadata.
+
+## Download Service
+
+Default address: `127.0.0.1:8765`.
+
+The background service is intentionally separate from the TUI process so queued/running download state can survive UI restarts.
+
+Primary responsibilities:
+
+- persistent download job store,
+- create/list/cancel/delete lifecycle,
+- bounded worker dispatch,
+- Ollama and Hugging Face execution paths,
+- debug/health/version compatibility surfaces.
+
+### Concurrency
+
+`AIMODEL_DOWNLOAD_MAX_WORKERS` controls the bounded worker pool. Default: `2`.
+
+### Transport boundary
+
+The service is loopback-only. Non-loopback bind/client hosts are rejected until authenticated TLS transport is implemented.
+
+`AIMODEL_DOWNLOAD_SERVICE_TOKEN` optionally protects non-health endpoints with a bearer token. `/health` remains unauthenticated for local probes/version checks.
 
 ## Data Storage
 
-**SQLite Databases:**
-| Database | Location | Tables | Purpose |
-|----------|----------|--------|---------|
-| `cache.db` | `data/cache.db` | `model_cache`, `hardware_snapshot` | Caching HF/Ollama metadata, hardware snapshots |
-| `downloads.db` | `data/downloads.db` | `jobs` | Download job queue (created by download service) |
+Runtime data uses OS-specific user-data locations by default rather than repository-local `data/` paths.
 
-**Client:**
-- `sqlite3` (stdlib) — Direct SQL access in `core/cache_db.py` and `downloads/download_service.py`
+Important configurable destinations include:
 
-**File Storage:**
-- Local filesystem only — Downloaded models stored in `models/` directory (GGUF files)
-- MLX models discovered from `~/.cache/huggingface/hub/` and `~/.cache/lm-studio/models/`
+- metadata/cache SQLite DB,
+- download-service SQLite DB,
+- Hugging Face model output directory.
 
-**Caching:**
-- **Persistent:** SQLite-based (24h TTL for model metadata, 90s TTL for search results)
-- **In-memory:** `SearchCache` class in `search/search_cache.py` — 20 entries max, hardware-aware invalidation (checks RAM/VRAM drift)
+`platformdirs` is used to resolve portable default locations.
 
-## Authentication & Identity
+### Metadata cache
 
-**Auth Provider:**
-- None built-in. HuggingFace token is optional and used only for higher API rate limits
-- Passed via `AIMODEL_HF_TOKEN` -> `HF_TOKEN` env var for download processes
-- Download service runs on localhost only (no auth required)
+`core/cache_db.py` maintains a shared SQLite connection inside the application process, guarded by an `RLock` and reopened on path/connection failure.
 
-## Background Services
+### Download store
 
-**Download Service:**
-- Implementation: `downloads/download_service.py` (796 LOC)
-- Protocol: HTTP REST on `127.0.0.1:8765`
-- Endpoints:
-  - `GET /health` — Health check with version
-  - `GET /jobs` — List download jobs
-  - `GET /debug/active` — Active download diagnostics
-  - `POST /jobs` — Create/upsert download job
-  - `POST /jobs/cancel` — Cancel download
-  - `POST /jobs/delete` — Delete job record
-  - `POST /shutdown` — Graceful shutdown
-- Lifecycle: Auto-started by `service_client.ensure_service_running()` on UI mount (`app.py:1195`)
-- Architecture: Threaded worker loop polling a SQLite queue
+The download service owns a separate SQLite store and its own concurrency controls.
 
-**REST API Server:**
-- Implementation: `api_server.py` (339 LOC)
-- Protocol: HTTP on `127.0.0.1:8787`
-- Endpoints:
-  - `GET /health` — Health check
-  - `GET /api/v1/system` — Hardware specs
-  - `GET /api/v1/models` — Search models (query, provider, limit, sort params)
-  - `GET /api/v1/models/top` — Top models
-  - `GET /api/v1/models/{name}/plan` — Hardware plan
-  - `GET /api/v1/scores/{name}` — Model scores
-  - `GET /api/v1/providers` — Available providers
+## Authentication and Secrets
 
-## Monitoring & Observability
+### Hugging Face
 
-**Error Tracking:**
-- None (no Sentry, no external logging service)
+Canonical application setting:
 
-**Logs:**
-- **loguru** — Console output (INFO level) + file rotation at `data/logs/app_{time}.log` (DEBUG level, 10MB rotation, 7-day retention)
-- `core/logging_.py` — Logger setup, used sparsely across the codebase
+- `AIMODEL_HF_TOKEN`.
 
-## CI/CD & Deployment
+Standard `HF_TOKEN` is accepted as a compatibility fallback where documented.
 
-**Hosting:**
-- Not applicable (terminal application, runs locally)
+The token should be read-only and scoped to the minimum required Hugging Face access.
 
-**CI Pipeline:**
-- Not detected (no `.github/workflows/` contents related to CI)
+### Download service
 
-## Environment Configuration
+Optional local bearer token:
 
-**Required env vars:**
-- None strictly required (all have defaults)
+- `AIMODEL_DOWNLOAD_SERVICE_TOKEN`.
 
-**Critical optional env vars:**
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `AIMODEL_HF_TOKEN` | None | HuggingFace API token for higher rate limits |
-| `AIMODEL_HF_SEARCH_LIMIT` | `15` | Results per page |
-| `AIMODEL_HF_SEARCH_MAX_PAGES` | `10` | Max pagination pages |
-| `AIMODEL_OLLAMA_API_BASE` | `http://localhost:11434` | Ollama local API endpoint |
-| `AIMODEL_OLLAMA_TIMEOUT` | `5` | Ollama request timeout (seconds) |
-| `AIMODEL_SMOKE` | Not set | Enable smoke-test mode (`"1"` to enable) |
+The download service is not designed as a LAN/public HTTP API.
 
-**Secrets location:**
-- `.env` file at project root (not committed) — contains `AIMODEL_HF_TOKEN`
-- Token forwarded to subprocess via `HF_TOKEN` env var (`downloads/download_service.py:348`)
+## CI and Packaging Integrations
 
-## Webhooks & Callbacks
+GitHub Actions currently contains active CI rather than “no CI” as stated by the old mapper output.
 
-**Incoming:**
-- None
+`CI` workflow:
 
-**Outgoing:**
-- None
+- verify matrix,
+- smoke matrix,
+- Ubuntu + Windows,
+- Python 3.12 + 3.14.
 
----
+A separate `Package` workflow verifies packaging/install behavior and is part of the project's normal exact-head merge gate.
 
-*Integration audit: 2026-06-09*
+## Observability
+
+- Local logging: loguru.
+- Provider diagnostics: legacy strings + structured provider metadata.
+- Download service: health/debug/job state endpoints.
+- No external hosted error-tracking service is required by the project.
+
+## Current Integration Risks
+
+### 1. Ollama registry HTML dependency — high priority
+
+Remote Ollama discovery relies on third-party HTML. Fixture-backed parser contracts and structural-failure detection are active roadmap work.
+
+### 2. Local runtime availability — expected degradation
+
+LM Studio, Docker Model Runner, Ollama runtime and MLX may not exist on a machine. Detection/search paths should fail closed or report provider diagnostics without breaking other providers.
+
+### 3. Platform-specific hardware/runtime evidence — medium priority
+
+Hosted CI proves install/verify/smoke on Ubuntu and Windows, but does not fully represent WSL, real GPU drivers, local model runtimes, or macOS Apple Silicon. A documented platform acceptance matrix is active roadmap work.
+
+## Documentation Rule
+
+Changes to ports, auth, provider scopes, endpoints, env variables, storage locations or third-party sources require updates to this document and README configuration where user-facing. See `docs/maintenance.md`.

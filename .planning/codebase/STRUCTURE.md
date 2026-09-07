@@ -1,210 +1,192 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-06-09
+**Baseline date:** 2026-09-07  
+**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
 
-## Directory Layout
+This document describes the current repository layout. It replaces the older mapper output that referenced a root `app.py` monolith and outdated file/test counts.
 
-```
-ai-model-explorer/
-├── app.py              # Main TUI application (2466 lines — monolith)
-├── main.py             # Entry point — runs AIModelViewer
-├── cli.py              # Click CLI with 8 commands (398 lines)
-├── api_server.py       # REST API on port 8787 (339 lines)
-├── config.py           # Pydantic Settings with env overrides (62 lines)
-├── pyproject.toml      # Build, lint, test, coverage config
+## Top-Level Layout
+
+```text
+llm-terminal/
+├── main.py                  # Primary TUI entry point
+├── tui_app.py               # Base Textual application implementation
+├── cli.py                   # Click CLI
+├── api_server.py            # Local REST API
+├── config.py                # Pydantic settings
+├── pyproject.toml           # Packaging/tooling config
 │
-├── core/               # Domain logic — hardware, scoring, caching (1627 lines)
-│   ├── hardware.py     #   HardwareMonitor + GPU detection (389 lines)
-│   ├── scoring.py      #   4-dimension scoring engine (475 lines)
-│   ├── model_intelligence.py  # MoE detection, quant selection (334 lines)
-│   ├── models.py       #   ModelResult TypedDict (54 lines)
-│   ├── utils.py        #   Name parsing, fit calculation (183 lines)
-│   ├── cache_db.py     #   SQLite metadata cache (158 lines)
-│   └── logging_.py     #   loguru setup (33 lines)
+├── app/                     # Runtime TUI support modules
+│   ├── viewer.py            # Runtime AIModelViewer subclass/provider selector
+│   ├── modals.py            # Detail/download/plan/comparison modals
+│   ├── widgets.py           # Focused Textual widgets
+│   ├── download_manager.py  # TUI-side download coordination
+│   ├── search_results_state.py
+│   └── search_constants.py
 │
-├── providers/          # Search backends (1162 lines)
-│   ├── __init__.py     #   BaseProvider ABC + registry (154 lines)
-│   ├── hf_provider.py  #   HuggingFace Hub search (272 lines)
-│   ├── ollama_provider.py     # Ollama registry scraping (325 lines)
-│   ├── lmstudio_provider.py   # LM Studio local API (123 lines)
-│   ├── docker_provider.py     # Docker Model Runner (139 lines)
-│   └── mlx_provider.py        # Apple Silicon MLX (149 lines)
-│
-├── downloads/          # Download management (1376 lines)
-│   ├── download_service.py    # Background HTTP service (796 lines)
-│   ├── service_client.py      # HTTP client for service (197 lines)
-│   ├── download_manager.py    # Download command builder (41 lines)
-│   ├── download_history.py    # History helpers (58 lines)
-│   ├── download_lifecycle.py  # Lifecycle management (134 lines)
-│   ├── download_status.py     # Status/state helpers (92 lines)
-│   └── hf_downloader.py       # HF-specific download logic (58 lines)
-│
-├── search/             # Search orchestration + caching (212 lines)
-│   ├── search_orchestration.py  # Provider-aware search flow (123 lines)
-│   └── search_cache.py          # In-memory cache with HW invalidation (89 lines)
-│
-├── results/            # Results table presentation (589 lines)
-│   ├── results_layout.py       # Responsive column widths (167 lines)
-│   ├── results_presenter.py    # Color-coded cell markup (241 lines)
-│   ├── results_text.py         # Truncation, alignment (62 lines)
-│   └── results_view.py         # Filter + sort engine (119 lines)
-│
-├── terminal_ui/        # Legacy Obsidian Console (769 lines)
-│   ├── app.py          #   ObsidianConsole — experimental workspace (631 lines)
-│   └── themes.py       #   Color theme definitions (137 lines)
-│
-├── scripts/            # Development/CI scripts
-│   ├── dev.py
-│   ├── release_check.py
-│   ├── release_check_helpers.py
-│   ├── reset_downloads.py
-│   └── reset_all.bat
-│
-├── tests/              # 34 test files, 3172 lines
-│   ├── conftest.py     #   Pytest config + --run-live flag
-│   ├── test_scoring.py #   303 lines — comprehensive scoring tests
-│   ├── test_model_intelligence.py  # 214 lines
-│   ├── test_providers_extended.py  # 180 lines
-│   ├── test_api_server.py          # 168 lines
-│   ├── test_download_service_store.py  # 154 lines
-│   ├── test_download_lifecycle.py  # 118 lines
-│   ├── test_scoring_ui.py          # 205 lines
-│   ├── test_dev_script.py          # 424 lines
-│   └── ... (26 more files)
-│
-├── data/               # Runtime data (git-ignored?)
-│   ├── cache.db        #   Model metadata + hardware snapshot cache
-│   └── downloads.db    #   Download job queue
-│
-├── models/             # Downloaded GGUF model files
-├── docs/               # Documentation
-│   ├── structure.md
-│   ├── archive/
-│   └── superpowers/
-│
-├── requirements/       # Pinned dependency files
-│   ├── requirements.txt
-│   ├── requirements-dev.txt
-│   ├── requirements-linux.txt
-│   ├── requirements-windows.txt
-│   └── *.in (source files)
-│
-└── .env                # Environment variables (not committed)
+├── core/                    # Domain logic and infrastructure helpers
+├── providers/               # Search/runtime providers + capabilities
+├── search/                  # Search orchestration, cache, pagination rules
+├── results/                 # Result layout/render/filter helpers
+├── downloads/               # Background download service + client/store/runner
+├── terminal_ui/             # Theme/style assets and isolated legacy internals
+├── scripts/                 # Dev/release/maintenance commands
+├── requirements/            # Intent files + committed platform locks
+├── tests/                   # Unit, contract, smoke and optional live tests
+├── docs/                    # Maintained developer/product documentation
+└── .planning/               # Active roadmap + current codebase baseline docs
 ```
 
-## Directory Purposes
+## Entry Points
 
-**`core/`** — Domain Business Logic:
-- Purpose: Hardware detection, model scoring, MoE intelligence, caching, utility functions
-- Contains: Domain services with no dependencies on UI or provider-specific code
-- Key files: `hardware.py` (hardware detection for all vendors), `scoring.py` (scoring engine + GPU bandwidth DB)
+### `main.py`
 
-**`providers/`** — Search Backends:
-- Purpose: Pluggable model search implementations following `BaseProvider` ABC
-- Contains: One file per provider, each with `detect()`, `search()`, `list_installed()`
-- Key files: `__init__.py` (registry, lazy imports), `hf_provider.py` (primary HF search)
+Installed script: `ai-model-explorer`
 
-**`downloads/`** — Download Management:
-- Purpose: Background download orchestration via subprocess HTTP service
-- Contains: HTTP server + client, state machine, SQLite job queue
-- Key files: `download_service.py` (796-line HTTP+worker server), `service_client.py` (UI-side client)
+Creates `app.viewer.AIModelViewer`. `app/viewer.py` subclasses the base `AIModelViewer` from `tui_app.py` and owns runtime provider-selector behavior.
 
-**`search/`** — Search Pipeline:
-- Purpose: Orchestrate multi-provider search, cache results
-- Contains: Cache-aware search dispatch, pagination helpers
+### `cli.py`
 
-**`results/`** — Results Presentation:
-- Purpose: Filter, sort, layout, and colorize model results for DataTable rendering
-- Contains: Pure formatting functions with no UI dependencies
+Installed script: `ai-model-explorer-cli`
 
-**`tests/`** — Test Suite:
-- Purpose: 34 test files, 3172 lines covering scoring, hardware, providers, downloads, API, UI
-- Contains: Unit tests + smoke tests; live integration tests behind `--run-live` flag
-- Key files: `conftest.py` (sys.path setup, --run-live flag, marker registration)
+Commands include system information, search, fit, recommend, plan, scores, and cache operations.
 
-## Key File Locations
+### `api_server.py`
 
-**Entry Points:**
-- `main.py` — Primary TUI entry point (`ai-model-explorer`)
-- `cli.py` — CLI entry point (`ai-model-explorer-cli`)
-- `api_server.py` — REST API (`python -m api_server`)
-- `downloads/download_service.py` — Background service (auto-launched)
+Invoked with `python -m api_server`.
 
-**Configuration:**
-- `pyproject.toml` — Project metadata, dependencies, ruff, mypy, pytest, coverage
-- `config.py` — Runtime settings via Pydantic
-- `.env` — Environment variable overrides (not committed)
-- `requirements/*.txt` — Pinned dependency versions
+Provides local machine-readable endpoints on port 8787 by default.
 
-**Core Logic:**
-- `app.py` — Main TUI application (2466 lines)
-- `core/scoring.py` — Scoring engine (475 lines)
-- `core/hardware.py` — Hardware detection (389 lines)
-- `core/model_intelligence.py` — MoE/quant intelligence (334 lines)
-- `providers/hf_provider.py` — HuggingFace search (272 lines)
-- `providers/ollama_provider.py` — Ollama search (325 lines)
+### `downloads/download_service.py`
 
-**Testing:**
-- `tests/` directory, 34 files, 3172 lines total
-- Configuration in `[tool.pytest.ini_options]` in `pyproject.toml`
+Auto-started by the client when required. Runs the persistent background download queue/service on port 8765 by default.
 
-## Naming Conventions
+## `app/` — TUI Composition
 
-**Files:**
-- `snake_case.py` — All Python files
-- Module `__init__.py` files present in all packages
+Use this package for presentation responsibilities that can be kept out of the base Textual application.
 
-**Functions:**
-- `snake_case` — All functions and methods
-- Private functions prefixed with `_` (e.g., `_select_preferred_gguf`, `_cpu_count`)
+- `viewer.py` — provider selector integration and runtime viewer extension.
+- `modals.py` — modal screens.
+- `widgets.py` — reusable Textual widgets.
+- `download_manager.py` — client-side download coordination/poll application.
+- `search_results_state.py` — search-result state and invariants.
+- `search_constants.py` — filter/sort/use-case UI constants and compact tags.
 
-**Variables:**
-- `snake_case` — All variables
-- Module-level constants: `UPPER_CASE` (e.g., `SERVICE_VERSION`, `GPU_BANDWIDTH`)
+When adding a new modal or provider-selector behavior, prefer `app/` over expanding `tui_app.py` unless the behavior fundamentally belongs to the base application event loop/layout.
 
-**Types:**
-- `PascalCase` — Classes (`AIModelViewer`, `HardwareMonitor`, `BaseProvider`)
-- `PascalCase` — TypedDicts (`ModelResult`), dataclasses (`Scores`, `Theme`)
-- `_T` suffix — TypeAlias conventions (e.g., `_TruncatePlain`, `_AlignPlain`)
+## `search/` — Search Pipeline
 
-## Where to Add New Code
+Key files:
 
-**New Feature (e.g., new provider):**
-- Add provider class in `providers/{name}_provider.py` extending `BaseProvider`
-- Register in `providers/__init__.py:get_all_provider_classes()` and `get_provider_filter_labels()`
-- Add UI filter label in `providers/__init__.py:_FILTER_TO_SLUGS` (if not in `search/search_orchestration.py`)
+- `search_orchestrator.py` — parallel provider fan-out/fan-in, cancellation, structured diagnostic aggregation.
+- `search_orchestration.py` — provider selection, capability-aware pagination and query/status helpers.
+- `search_cache.py` — in-memory search cache with hardware-aware invalidation and stale-entry access.
 
-**New Scoring Dimension:**
-- Add scoring function in `core/scoring.py`
-- Add weight in `USE_CASE_WEIGHTS` dict
-- Add field to `Scores` dataclass
-- Update `ModelResult` TypedDict in `core/models.py`
-- Add column to `results_presenter.py` markup functions
-- Add to comparison modal in `app.py:627-655`
+New provider orchestration behavior should normally be implemented here rather than directly in Textual callbacks.
 
-**New UI Modal:**
-- Create new `ModalScreen` subclass in `app.py` following `ModelDetailModal` pattern
-- Add action method to `AIModelViewer` (e.g., `action_open_plan_mode`)
-- Add keybinding in `BINDINGS` list
+## `providers/` — Provider Backends
 
-**New CLI Command:**
-- Add Click command in `cli.py` following `@cli.command()` pattern
-- Wire into `pyproject.toml` if needed
+Key files:
 
-**New API Endpoint:**
-- Add handler method to `ModelAPIHandler` in `api_server.py`
-- Register route in `do_GET()` dispatch
+- `base.py` — `SearchResult` contract.
+- `capabilities.py` — canonical provider capability metadata.
+- `__init__.py` — `BaseProvider` interface + registry/detection helpers.
+- `ollama_provider.py` — Ollama local API + remote registry HTML discovery.
+- `hf_provider.py` — Hugging Face search/metadata integration.
+- `lmstudio_provider.py` — LM Studio local API.
+- `docker_provider.py` — Docker Model Runner local API.
+- `mlx_provider.py` — Apple Silicon/local cache discovery.
 
-## Special Directories
+When adding a provider:
 
-**`data/`:** Runtime SQLite databases created on first run. Contains `cache.db` and `downloads.db`. Should be added to `.gitignore`.
+1. implement the provider module/interface,
+2. declare canonical capabilities,
+3. register discovery/detection,
+4. add focused provider contract/error tests,
+5. expose it to TUI/CLI/REST only when that surface intentionally supports it.
 
-**`models/`:** Downloaded GGUF model files. Large binary files — should be excluded from version control.
+Do not infer capabilities from display labels or result length.
 
-**`models/.cache/`:** HuggingFace Hub cache for downloaded model metadata.
+## `core/` — Shared Domain Logic
 
-**`terminal_ui/`:** Contains a legacy, unused application (`ObsidianConsole` in `app.py:329`). Not connected to the main entry point. Kept as historical reference.
+Contains:
 
----
+- hardware detection,
+- scoring and GPU bandwidth data,
+- model/MoE/quantization intelligence,
+- SQLite metadata cache,
+- shared HTTP session/retry helpers,
+- structured provider error types,
+- logging and utility functions.
 
-*Structure analysis: 2026-06-09*
+`core/` should remain independent of Textual UI details.
+
+## `results/` — View Logic
+
+Contains pure or mostly-pure helpers for:
+
+- responsive columns,
+- cell presentation,
+- text truncation/alignment,
+- filtering/sorting/result identity.
+
+Use these modules for deterministic presentation logic that can be tested without starting the TUI.
+
+## `downloads/` — Download Service
+
+The package is split between client/API/state/runner concerns instead of one service monolith.
+
+Important modules include:
+
+- `download_service.py` — service composition/startup and worker dispatch,
+- `api.py` — service HTTP API handling,
+- `store.py` — persistent download-job SQLite store,
+- `runner.py` — job execution/process handling,
+- `service_client.py` — TUI/client requests and service compatibility handling,
+- `download_history.py`, `download_lifecycle.py`, `download_status.py` — reusable state helpers,
+- `download_manager.py` — command/payload helpers,
+- `hf_downloader.py` — focused Hugging Face downloader entry path.
+
+The worker pool is bounded and configurable; download state is persisted independently of the TUI process.
+
+## `tests/` — Verification
+
+The verify lane contains more than 600 tests as of this baseline. Tests cover:
+
+- core scoring/model intelligence/hardware helpers,
+- provider parsing/retry/structured error contracts,
+- search orchestration/cancellation/pagination,
+- cache concurrency,
+- REST/CLI contracts,
+- download service/store/lifecycle,
+- TUI state/view helpers and smoke paths,
+- dev/release scripts.
+
+Live external integration tests are opt-in (`--run-live`).
+
+## Runtime Data
+
+Runtime data is not assumed to live under a repository-local `data/` directory. Defaults use OS-specific per-user application data paths. Configuration variables can override cache DB, download DB, and model destinations.
+
+Large model files, runtime DBs, logs, virtualenvs and generated state must stay out of version control.
+
+## Where to Add New Work
+
+| Change | Preferred location |
+|---|---|
+| Provider implementation | `providers/{name}_provider.py` + capabilities/registry |
+| Provider fan-out/cancel/error aggregation | `search/search_orchestrator.py` |
+| Pagination/provider selection rules | `search/search_orchestration.py` |
+| Search caching | `search/search_cache.py` |
+| Scoring/model intelligence | `core/` |
+| Result sorting/formatting/layout | `results/` |
+| New modal/widget | `app/modals.py` / `app/widgets.py` |
+| TUI download behavior | `app/download_manager.py` + `downloads/` helpers |
+| Background download execution | `downloads/` service/store/runner modules |
+| CLI behavior | `cli.py` |
+| REST behavior | `api_server.py` |
+| Documentation/process | `README.md`, `docs/`, `.planning/` |
+
+## Documentation Rule
+
+Structural changes require a review of this file and `ARCHITECTURE.md` before the implementation is considered fully documented. See `docs/maintenance.md`.

@@ -1,247 +1,203 @@
-# Testing Patterns
+# Testing and Verification
 
-**Analysis Date:** 2026-06-09
+**Baseline date:** 2026-09-07  
+**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`
 
 ## Test Framework
 
-**Runner:**
-- pytest
-- Config: `pyproject.toml` > `[tool.pytest.ini_options]`
-- Test path: `tests/`
-- Default args: `-q` (quiet mode)
+- **Runner:** pytest.
+- **Default test path:** `tests/`.
+- **Default pytest args:** `-q` via `pyproject.toml`.
+- **Live external tests:** opt-in with `--run-live`.
+- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider classes, and deterministic pure-function tests.
 
-**Assertion Library:**
-- Standard `assert` statements (pytest native)
+The old 2026-06-09 document described 34 test files and little/no mocking. That is no longer representative.
 
-**Run Commands:**
+## Normal Developer Commands
+
 ```bash
-pytest                          # Run all tests (quiet mode)
-pytest -v                       # Verbose output
-pytest -x                       # Stop on first failure
-pytest --run-live               # Include live integration tests
-pytest tests/test_scoring.py    # Single test file
-pytest -k "test_perfect"        # Keyword filter
+python scripts/dev.py bootstrap
+python scripts/dev.py verify
+python scripts/dev.py smoke
 ```
 
-**Coverage:**
+### `verify`
+
+The required local verify lane currently runs:
+
+1. pytest,
+2. import smoke,
+3. Ruff checks.
+
+The latest baseline CI verify job observed **603 passing tests** on Ubuntu/Python 3.12 for PR #63.
+
+### `smoke`
+
+The smoke lane exercises bounded/offline-safe startup paths for:
+
+- CLI,
+- REST API,
+- TUI test-mode startup,
+- download service.
+
+Smoke is not a replacement for the full unit/contract suite.
+
+## CI Matrix
+
+GitHub Actions runs verify and smoke on:
+
+| OS | Python |
+|---|---|
+| Ubuntu | 3.12 |
+| Ubuntu | 3.14 |
+| Windows | 3.12 |
+| Windows | 3.14 |
+
+The normal merge process also requires the separate `Package` workflow to be green on the exact PR head.
+
+## Exact-Head Rule
+
+A green workflow result belongs to one commit SHA. If the PR head changes, prior green evidence is stale and must not be used as the merge gate.
+
+Before merge:
+
+- confirm PR is still open and mergeable,
+- confirm exact head SHA,
+- confirm CI + Package success for that SHA,
+- confirm no unresolved review thread/blocker,
+- merge with expected head SHA.
+
+## Test Categories
+
+### Core/domain tests
+
+Cover:
+
+- scoring,
+- GPU bandwidth lookup,
+- MoE/model-size/quantization logic,
+- hardware helper fallbacks,
+- utility functions,
+- cache serialization and concurrency.
+
+### Provider contract tests
+
+Cover:
+
+- Hugging Face/Ollama retry and structured diagnostics,
+- LM Studio/Docker response parse containment,
+- Docker installed-list parse containment,
+- MLX I/O containment and global limit semantics,
+- provider capabilities,
+- pagination authority,
+- installed-model behavior.
+
+Provider error tests should assert both legacy human-readable errors and structured metadata when the provider supports both.
+
+### Search orchestration tests
+
+Cover:
+
+- parallel fan-in grouping,
+- provider exception fallback,
+- cancellation polling and shutdown behavior,
+- partial outcomes,
+- structured diagnostic preservation,
+- capability-gated pagination,
+- result counts/order.
+
+### REST contract tests
+
+Cover:
+
+- input validation,
+- provider descriptors/capabilities,
+- configured HF token propagation,
+- provider diagnostics,
+- partial results + diagnostics,
+- structured error serialization.
+
+### CLI contract tests
+
+Cover:
+
+- provider choices/capabilities,
+- HF token propagation,
+- provider diagnostics on stderr,
+- provider-specific search isolation,
+- `recommend --json` stdout remaining parseable JSON while warnings use stderr.
+
+### Download tests
+
+Cover store/state/lifecycle/client/runner behavior including:
+
+- job persistence,
+- cancellation/deletion guards,
+- command execution helpers,
+- debug/status behavior,
+- concurrent worker/store paths,
+- service compatibility and client behavior.
+
+### TUI tests
+
+TUI testing is deliberately split:
+
+- pure state/layout/presenter/view helpers where possible,
+- `app/` manager/state tests,
+- focused Textual test-mode smoke/interaction tests for mounted behavior.
+
+The active roadmap prioritizes additional coverage at TUI application boundaries before raising the coverage gate.
+
+### Live tests
+
+External live tests are skipped by default and enabled explicitly:
+
 ```bash
-pytest --cov=. --cov-report=term --cov-report=html
-coverage report                 # Show coverage with missing lines
+pytest --run-live
 ```
 
-## Test File Organization
-
-**Location:**
-- All tests in `tests/` directory (co-located test dir, not co-located with source)
-- 34 test files, 3172 lines total
-
-**Naming:**
-- `test_{module_name}.py` — Pattern matches the module being tested (e.g., `test_scoring.py` for `core/scoring.py`, `test_hardware_expanded.py` for `core/hardware.py`)
-- `test_{feature}_helpers.py` — Helper-specific tests (e.g., `test_hf_provider_helpers.py`, `test_ollama_provider_helpers.py`)
-
-**Structure:**
-```
-tests/
-├── conftest.py                         # Fixtures, --run-live flag
-├── test_scoring.py                     # Scoring engine (303 lines)
-├── test_hardware_expanded.py           # Hardware detection (79 lines)
-├── test_model_intelligence.py          # MoE + quant (214 lines)
-├── test_helpers.py                     # Core utils (53 lines)
-├── test_search_cache.py                # In-memory cache (81 lines)
-├── test_search_orchestration.py        # Search pipeline (64 lines)
-├── test_results_layout.py              # Column layout (83 lines)
-├── test_results_presenter.py           # Cell markup (82 lines)
-├── test_results_text.py                # Text helpers (34 lines)
-├── test_results_view.py                # Filter/sort (95 lines)
-├── test_download_manager.py            # Download commands (38 lines)
-├── test_download_status.py             # Status helpers (27 lines)
-├── test_download_history.py            # History helpers (40 lines)
-├── test_download_lifecycle.py          # Lifecycle (118 lines)
-├── test_download_service_store.py      # Job store (154 lines)
-├── test_download_service_debug.py      # Service debug (39 lines)
-├── test_service_client.py              # HTTP client (13 lines)
-├── test_providers_extended.py          # Provider integration (180 lines)
-├── test_hf_provider_helpers.py         # HF helpers (13 lines)
-├── test_ollama_provider_helpers.py     # Ollama helpers (59 lines)
-├── test_provider_error_helpers.py      # Error handling (25 lines)
-├── test_plan_mode.py                   # Plan mode modal (79 lines)
-├── test_scoring_ui.py                  # Scoring UI (205 lines)
-├── test_app_compact_mode.py            # Compact mode (85 lines)
-├── test_app_modal_polling.py           # Modal polling (72 lines)
-├── test_smoke_modes.py                 # Smoke tests (89 lines)
-├── test_api_server.py                  # REST API (168 lines)
-├── test_main_entrypoint.py             # entry point (14 lines)
-├── test_themes.py                      # Themes (58 lines)
-├── test_cache_db.py                    # SQLite cache (50 lines)
-├── test_live_platforms.py              # Live integration (80 lines)
-├── test_release_check_helpers.py       # Release check (20 lines)
-├── test_dev_script.py                  # Dev script (424 lines)
-└── __init__.py                         # Empty
-```
-
-## Test Structure
-
-**Suite Organization:**
-```python
-# Class-based grouping of related tests
-class TestFindGpuBandwidth:
-    def test_known_nvidia_gpu(self):
-        bw = find_gpu_bandwidth("NVIDIA GeForce RTX 4090")
-        assert bw == 1008
-
-    def test_unknown_gpu_returns_none(self):
-        bw = find_gpu_bandwidth("Some Random GPU 3000")
-        assert bw is None
-
-class TestComputeQualityScore:
-    def test_large_model_scores_higher(self):
-        s70b = compute_quality_score(params="70B", quant="Q4_K_M")
-        s7b = compute_quality_score(params="7B", quant="Q4_K_M")
-        assert s70b > s7b
-```
-
-**Patterns:**
-- Class names: `Test{Feature}` (e.g., `TestFindGpuBandwidth`, `TestScoreModel`, `TestComputeFitScore`)
-- Method names: `test_{behavior}` (e.g., `test_known_nvidia_gpu`, `test_cpu_offload_slower`, `test_all_weights_sum_to_one`)
-- No fixtures in most tests — inputs constructed inline
-- No teardown needed (no persistent state in unit tests)
-
-## Mocking
-
-**Framework:**
-- No mocking library detected. Tests rely on:
-  - Direct function calls with controlled inputs
-  - `--run-live` flag for integration tests that hit real services
-  - `conftest.py` skips live tests by default
-
-**Patterns:**
-```python
-# No mocking — test pure functions with known inputs
-def test_perfect_fit_scores_high(self):
-    score = compute_fit_score(model_size_gb=12.0, vram_gb=24.0, ram_gb=32.0, mode="GPU")
-    assert score >= 80
-```
-
-**What to Mock:**
-- External HTTP calls (HuggingFace API, Ollama registry)
-- Hardware detection (GPU availability, VRAM size)
-- Subprocess calls (ollama rm, rocm-smi)
-
-**What NOT to Mock:**
-- Scoring logic (tested directly with known inputs)
-- Layout/formatting functions (tested with sample data)
-- Cache logic (tested with controlled state)
-- Model intelligence (tested with model name strings)
-
-## Fixtures and Factories
-
-**Test Data:**
-```python
-# Inline test data — no factory functions
-specs = {
-    "vram_total": 24.0,
-    "vram_free": 20.0,
-    "ram_total": 32.0,
-    "ram_free": 28.0,
-    "gpu_name": "NVIDIA GeForce RTX 4090",
-    "has_gpu": True,
-}
-```
-
-**Location:**
-- No centralized test fixtures or factories
-- All test data constructed inline in test methods
-- `conftest.py` only provides pytest configuration (sys.path, --run-live, markers)
+Use live tests to validate actual external/provider behavior, not as a substitute for deterministic fixtures.
 
 ## Coverage
 
-**Requirements:**
+Current config:
+
 ```toml
 [tool.coverage.report]
-fail_under = 40  # CI gate — 40% minimum
+show_missing = true
+fail_under = 45
 ```
 
-**View Coverage:**
+Important distinction: **45 is configured, but the normal `scripts/dev.py verify` lane does not currently run pytest under coverage, so this is not yet an enforced CI threshold.**
+
+Active quality plan:
+
+1. add a reproducible measured coverage lane,
+2. record the real baseline,
+3. add tests for high-risk uncovered paths,
+4. enforce staged thresholds: 50 → 55 → 60.
+
+Do not raise coverage by excluding meaningful production code or by weakening tests.
+
+Useful commands once measuring locally:
+
 ```bash
-coverage run -m pytest && coverage report
-coverage html    # Open htmlcov/index.html
+pytest --cov=. --cov-report=term-missing
+pytest --cov=. --cov-report=html
 ```
 
-**Known gaps:** The `fail_under = 40` target is low, suggesting significant untested areas. The monolith `app.py` (2466 lines) has very limited test coverage — only 3 test files target the TUI (`test_app_compact_mode.py`, `test_app_modal_polling.py`, `test_smoke_modes.py`).
+## Regression-Test Rule
 
-## Test Types
+Every correctness fix should add a test that fails against the pre-fix behavior and pins the intended contract. Prefer the narrowest test seam that still proves the user-facing invariant.
 
-**Unit Tests (dominant):**
-- Pure function tests for scoring, hardware detection, model intelligence, utilities
-- No external dependencies, fast execution
-- Examples: `test_scoring.py`, `test_hardware_expanded.py`, `test_helpers.py`
+Examples of preferred assertions:
 
-**Service/Store Tests:**
-- Tests for `DownloadStore` SQLite operations (`test_download_service_store.py`)
-- Tests for download lifecycle (`test_download_lifecycle.py`)
-- Uses `DownloadStore.__init__` with temp/memory DB
+- exact result limit rather than implementation-specific loop structure,
+- diagnostic code/retryability/status rather than raw exception class when crossing provider boundaries,
+- stdout/stderr separation for CLI scripting contracts,
+- partial-success preservation when one provider fails,
+- no continuation UI for non-paginated providers.
 
-**Smoke Tests:**
-- `test_smoke_modes.py` — Smoke-mode TUI test via `app.run_test()`
-- `test_app_compact_mode.py` — Compact-mode UI behavior
-- `test_app_modal_polling.py` — Modal poll pause behavior
+## Documentation Rule
 
-**Live Integration Tests:**
-- `test_live_platforms.py` — Tests that hit real HuggingFace/Ollama APIs
-- Gated behind `--run-live` flag
-- Skipped by default
-
-**UI Tests:**
-- `test_results_layout.py`, `test_results_presenter.py`, `test_results_text.py`, `test_results_view.py` — Test formatting/computation (no actual widget rendering)
-
-**E2E Tests:**
-- Not used. Smoke tests (`test_smoke_modes.py`) are the closest equivalent.
-
-## Common Patterns
-
-**Async Testing:**
-```python
-# Textual's async test pilot — used in smoke tests
-async def test_smoke_mode():
-    app = AIModelViewer()
-    async with app.run_test() as pilot:
-        await pilot.pause(1.5)
-    assert app.return_code in (None, 0)
-```
-
-**Error Testing:**
-```python
-# Testing error conditions with known edge cases
-def test_no_fit_returns_zero(self):
-    tok_s = estimate_tok_per_s(
-        model_size_gb=4.8, gpu_name="NVIDIA GeForce RTX 4090", mode="No Fit"
-    )
-    assert tok_s == 0.0
-
-def test_empty_string(self):
-    bw = find_gpu_bandwidth("")
-    assert bw is None
-```
-
-**State Machine Testing:**
-```python
-# Download lifecycle state transitions
-class TestDownloadLifecycle:
-    def test_cancel_before_delete_required_for_active(self):
-        assert should_cancel_before_delete(delete_data=True, state="downloading") is True
-        assert should_cancel_before_delete(delete_data=True, state="completed") is False
-```
-
-**Hardware-Agnostic Testing:**
-```python
-class TestHardwareMonitorSpecs:
-    def test_specs_has_backend_field(self):
-        monitor = HardwareMonitor()
-        specs = monitor.get_specs()
-        assert "backend" in specs
-        assert specs["backend"] in ("cuda", "rocm", "metal", "sycl", "cpu")
-```
-
----
-
-*Testing analysis: 2026-06-09*
+When a merge changes test commands, CI matrices, coverage policy, provider contracts, or acceptance evidence, update this file in the same PR when practical. See `docs/maintenance.md`.
