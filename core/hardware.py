@@ -130,33 +130,41 @@ class HardwareMonitor:
             self._detect_intel()
 
     def _detect_nvidia(self):
-        """Detect NVIDIA GPU via pynvml or nvidia_smi."""
+        """Detect NVIDIA GPU via pynvml or nvidia_smi without partial state commits."""
         try:
             import nvidia_smi
 
             nvidia_smi.nvmlInit()
-            self.handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
-            self.gpu_name = nvidia_smi.nvmlDeviceGetName(self.handle)
-            if isinstance(self.gpu_name, bytes):
-                self.gpu_name = self.gpu_name.decode("utf-8")
-            self.nvidia_available = True
-            self.gpu_count = nvidia_smi.nvmlDeviceGetCount()
-            return
+            handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+            gpu_name = nvidia_smi.nvmlDeviceGetName(handle)
+            if isinstance(gpu_name, bytes):
+                gpu_name = gpu_name.decode("utf-8")
+            gpu_count = nvidia_smi.nvmlDeviceGetCount()
         except Exception:
             logger.debug("nvidia_smi NVML init failed (expected on CI/headless)")
+        else:
+            self.handle = handle
+            self.gpu_name = gpu_name
+            self.gpu_count = gpu_count
+            self.nvidia_available = True
+            return
 
         try:
             import pynvml
 
             pynvml.nvmlInit()
-            self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            self.gpu_name = pynvml.nvmlDeviceGetName(self.handle)
-            if isinstance(self.gpu_name, bytes):
-                self.gpu_name = self.gpu_name.decode("utf-8")
-            self.nvidia_available = True
-            self.gpu_count = pynvml.nvmlDeviceGetCount()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            gpu_name = pynvml.nvmlDeviceGetName(handle)
+            if isinstance(gpu_name, bytes):
+                gpu_name = gpu_name.decode("utf-8")
+            gpu_count = pynvml.nvmlDeviceGetCount()
         except Exception:
             logger.debug("pynvml NVML init failed (expected on CI/headless)")
+        else:
+            self.handle = handle
+            self.gpu_name = gpu_name
+            self.gpu_count = gpu_count
+            self.nvidia_available = True
 
     def _detect_amd(self):
         """Detect AMD GPU via rocm-smi."""
