@@ -36,6 +36,8 @@ The following items from the old roadmap are already implemented and should not 
 - Loopback-only download-service transport with optional bearer-token protection for non-health endpoints.
 - Periodic TUI download polling preserves last-known state on expected service failures, surfaces deduplicated stale/recovery status, and no longer swallows unexpected programming failures.
 - Action-triggered download synchronization preserves last-known state on expected service failures, reports the failed refresh, and no longer swallows unexpected programming failures.
+- Download start/cancel/delete broad catches are classified as intentional user-visible containment: callers receive explicit failure status rather than false success.
+- Hardware probe fallbacks are classified as intentional best-effort platform detection; NVIDIA NVML state is committed only after a complete probe so partial failures cannot leave false CUDA state or suppress later vendor fallbacks.
 - Platform-specific user-data locations for cache/download state and Hugging Face model files.
 - MoE-aware model-size estimation delegated to one canonical implementation.
 - Pre-built GPU bandwidth lookup instead of repeated linear scans.
@@ -47,43 +49,29 @@ The following items from the old roadmap are already implemented and should not 
 - Staged aggregate coverage gate ratchet **50% → 55% → 60%**.
 - Focused fake-process/state coverage for `downloads/runner.py`, raising that module from 24% to 90%.
 - Focused lifecycle/request coverage for `downloads/service_client.py`, raising that module from 46% to 90%.
-- Current canonical coverage evidence: `5043` statements, `1685` missed, **66.59%** aggregate, **60% enforced floor**.
+- Focused NVIDIA probe coverage raised `core/hardware.py` from 44% to 52% while pinning atomic state semantics.
+- Current canonical coverage evidence: `5095` statements, `1661` missed, **67.40%** aggregate, **60% enforced floor**.
+- Residual silent-failure audit completed for the previously tracked provider registry, selector synchronization, download polling/sync/action, and hardware-probe boundaries.
 
 ## P1 — Quality Baseline
 
-### Q1. Residual silent-failure audit
+### Q1. Targeted coverage when consequential weak seams are touched
 
-The staged aggregate coverage goal is complete. Coverage remains a merge gate and should continue to improve when concrete work touches weak boundaries, but there is no active generic “raise the percentage” task.
-
-Audit remaining broad exception/suppression boundaries and classify each as one of:
-
-- expected fail-closed behavior with logging,
-- user-visible diagnostic required,
-- specific exception types required,
-- intentional best-effort behavior that should be documented.
-
-Initial targets:
-
-- remaining download action fallbacks after polling and `DownloadManager.sync_jobs()` hardening,
-- platform hardware probes.
-
-The goal is not “remove every `except Exception`”; it is to eliminate unobservable failures where they can mislead users or hide correctness problems.
-
-### Q2. Targeted coverage when consequential weak seams are touched
+The staged aggregate coverage goal and the residual silent-failure audit are complete. Coverage remains a merge gate and should continue to improve when concrete work touches weak boundaries; there is no active generic “raise the percentage” or “remove every broad catch” task.
 
 Remaining lower-coverage modules include:
 
 - `app/modals.py` — 25%,
-- `app/viewer.py` — 35%,
 - `tui_app.py` — 38%,
-- `core/hardware.py` — 44%,
-- `downloads/api.py` — 46%.
+- `downloads/api.py` — 46%,
+- `core/hardware.py` — 52%,
+- `app/viewer.py` — 57%.
 
 Do not create percentage-only PRs indefinitely. Add focused tests when these modules are changed for a concrete correctness, resilience, performance, or platform goal. Future aggregate gate increases should be evidence-driven and should not use new production exclusions or weaker assertions.
 
 ## P1 — Ollama Registry Resilience
 
-Ollama remote discovery still depends on `ollama.com` HTML structure. This is the largest remaining external-format fragility.
+Ollama remote discovery still depends on `ollama.com` HTML structure. This is the largest remaining external-format fragility and is now the primary P1 implementation track.
 
 ### O1. Fixture-backed parser contracts
 
