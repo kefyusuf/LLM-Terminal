@@ -36,6 +36,7 @@
 - Added bounded parallel download workers controlled by `AIMODEL_DOWNLOAD_MAX_WORKERS` (default `2`).
 - Moved runtime databases/model output toward OS-specific per-user application-data locations with configuration overrides.
 - Hardened the download-service trust boundary: loopback-only bind/client hosts, optional bearer-token protection for non-health endpoints, and explicit rejection of non-loopback transport until TLS exists.
+- Periodic TUI download polling now preserves last-known state while surfacing deduplicated service-failure/recovery status; unexpected programming failures are no longer swallowed by that polling boundary.
 - Expanded cancellation, process, persistence, debug, service-version, and compatibility coverage.
 
 ### Packaging, CI, and verification
