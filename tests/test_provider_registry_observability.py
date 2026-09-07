@@ -94,8 +94,14 @@ def test_builtin_availability_survives_unexpected_detection_failure():
     with (
         patch("providers.get_all_provider_classes", return_value=[_BrokenHuggingFaceProvider]),
         patch("core.hardware.check_ollama_running", return_value=False),
-        patch("providers.logger.warning"),
+        patch("providers.logger.warning") as warning,
     ):
         available = providers.detect_available_providers()
 
     assert available["huggingface"] is True
+    warning.assert_called_once_with(
+        "Provider {} detection failed unexpectedly; preserving fallback availability={} ({})",
+        "_BrokenHuggingFaceProvider",
+        True,
+        "AssertionError",
+    )
