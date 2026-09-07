@@ -33,13 +33,12 @@ from downloads.service_client import (
     ensure_service_running,
     get_active_download_debug,
     get_service_health,
-    get_service_request_errors,
     list_jobs,
 )
 from providers.capabilities import get_all_provider_capabilities
 
 
-_DOWNLOAD_SERVICE_POLL_ERRORS = get_service_request_errors()
+_DOWNLOAD_SERVICE_POLL_ERRORS = (OSError, ValueError, RuntimeError)
 
 
 def _provider_slug_for_source(source: Any) -> str | None:
