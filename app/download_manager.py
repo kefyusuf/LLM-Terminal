@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import time
+import urllib.error
 from collections.abc import Callable
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 
 from downloads.download_history import (
     action_label_for_entry,
@@ -38,7 +39,13 @@ from downloads.service_client import (
 from providers.capabilities import get_all_provider_capabilities
 
 
-_DOWNLOAD_SERVICE_POLL_ERRORS = (HTTPError, URLError, TimeoutError, ValueError, RuntimeError)
+_DOWNLOAD_SERVICE_POLL_ERRORS = (
+    HTTPError,
+    urllib.error.URLError,
+    TimeoutError,
+    ValueError,
+    RuntimeError,
+)
 
 
 def _provider_slug_for_source(source: Any) -> str | None:
@@ -70,7 +77,7 @@ def _download_poll_failure_status(exc: Exception) -> str:
         return f"Download service status refresh failed (HTTP {exc.code}); {suffix}"
     if isinstance(exc, TimeoutError):
         return f"Download service status refresh timed out; {suffix}"
-    if isinstance(exc, URLError):
+    if isinstance(exc, urllib.error.URLError):
         return f"Download service is unavailable; {suffix}"
     if isinstance(exc, ValueError):
         return f"Download service returned invalid status data; {suffix}"
