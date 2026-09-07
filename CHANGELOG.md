@@ -14,6 +14,7 @@
 - Preserved orchestrator-generated provider failures as machine-readable diagnostics instead of dropping them to strings only.
 - Fixed provider pagination authority so non-paginated/multi-provider searches cannot synthesize false continuation from result counts.
 - Fixed NVIDIA hardware detection so partially successful NVML probes cannot leave a false-positive CUDA/NVIDIA state or suppress fallback vendor detection.
+- Fixed Ollama registry pull-count parsing so nested HTML text boundaries cannot merge model-name digits into pull counts.
 
 ### REST and CLI contracts
 
