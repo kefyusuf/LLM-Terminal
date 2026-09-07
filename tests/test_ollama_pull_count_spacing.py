@@ -4,19 +4,20 @@ from unittest.mock import patch
 
 
 class FakeResponse:
-    status_code = 200
-    headers = {}
-    text = """
-    <html><body><ul>
-      <li>
-        <a href="/library/llama3">Llama 3 <span>1.2M Pulls</span></a>
-      </li>
-      <li>
-        <a href="/library/qwen2">Qwen 2</a>
-        <span>500K Pulls</span>
-      </li>
-    </ul></body></html>
-    """
+    def __init__(self):
+        self.status_code = 200
+        self.headers = {}
+        self.text = """
+        <html><body><ul>
+          <li>
+            <a href="/library/llama3">Llama 3 <span>1.2M Pulls</span></a>
+          </li>
+          <li>
+            <a href="/library/qwen2">Qwen 2</a>
+            <span>500K Pulls</span>
+          </li>
+        </ul></body></html>
+        """
 
 
 def _specs() -> dict[str, object]:
