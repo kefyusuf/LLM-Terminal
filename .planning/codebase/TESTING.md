@@ -1,7 +1,7 @@
 # Testing and Verification
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `5dd4014ef2a50ba14210da0d7b3bf675281c8586`
+**Baseline revision:** `9d9e23bf59ca5089e287c4e98b377935699fbe97`
 
 ## Test Framework
 
@@ -10,7 +10,7 @@
 - **Default pytest args:** `-q` via `pyproject.toml`.
 - **Live external tests:** opt-in with `--run-live`.
 - **Coverage:** pytest-cov / coverage.py.
-- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider classes, and deterministic pure-function tests.
+- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider/process/state classes, and deterministic pure-function tests.
 
 ## Normal Developer Commands
 
@@ -29,7 +29,7 @@ The required local verify lane runs:
 2. import smoke,
 3. Ruff checks.
 
-The latest baseline verify suite contains more than 600 deterministic tests.
+The verify suite contains more than 600 deterministic tests.
 
 ### `coverage`
 
@@ -40,23 +40,24 @@ Canonical CI coverage environment:
 - Ubuntu,
 - Python 3.12.
 
-Measured baseline from PR #67:
+Current measured evidence from PR #69:
 
 - statements: `5043`,
-- missed: `1841`,
-- total coverage: **63%**.
+- missed: `1746`,
+- total coverage: **65.38%**,
+- `downloads/runner.py`: **90%** after focused fake-process/state execution tests.
 
 Current enforced merge floor:
 
 ```toml
 [tool.coverage.report]
 show_missing = true
-fail_under = 50
+fail_under = 55
 ```
 
-The optional `--fail-under` argument exists for explicit measurement/debugging. `--fail-under 0` was used to establish the baseline and must not be used as a merge gate.
+The optional `--fail-under` argument exists for explicit measurement/debugging. `--fail-under 0` was used only to establish the original baseline and must not be used as a merge gate.
 
-The next planned ratchets are **55%** and **60%**, backed by focused tests rather than new exclusions.
+The remaining planned aggregate ratchet is **60%**, backed by focused tests rather than new exclusions.
 
 ### `smoke`
 
@@ -180,7 +181,17 @@ Cover store/state/lifecycle/client/runner behavior including:
 - command execution helpers,
 - debug/status behavior,
 - concurrent worker/store paths,
-- service compatibility and client behavior.
+- service compatibility and client behavior,
+- runner terminal states and subprocess cancellation behavior through deterministic fake processes.
+
+`tests/test_downloads_runner_execution.py` deliberately avoids spawning real subprocesses. It pins:
+
+- Hugging Face payload validation,
+- running → completed/failed/cancelled transitions,
+- terminate → kill escalation,
+- streamed progress and idle heartbeat updates,
+- last-line failure details,
+- `process_job` dispatch and spawn-error containment.
 
 ### TUI tests
 
@@ -202,11 +213,12 @@ Use live tests to validate actual external/provider behavior, not as a substitut
 
 ## Coverage Distribution and Next Targets
 
-The aggregate baseline is healthy enough to enforce a floor, but coverage is uneven. The measured PR #67 report identified high-value low-coverage areas:
+Focused runner execution coverage removed one of the largest consequential gaps: `downloads/runner.py` increased from **24% to 90%** and aggregate coverage increased from 63.51% to **65.38%**.
+
+Remaining high-value low-coverage areas from the same canonical environment:
 
 | Module | Measured coverage |
 |---|---:|
-| `downloads/runner.py` | 24% |
 | `app/modals.py` | 25% |
 | `app/viewer.py` | 35% |
 | `tui_app.py` | 38% |
@@ -214,9 +226,9 @@ The aggregate baseline is healthy enough to enforce a floor, but coverage is une
 | `downloads/api.py` | 46% |
 | `downloads/service_client.py` | 46% |
 
-Other critical seams are already materially higher, including provider parsing and search orchestration.
+Other critical seams are materially higher, including provider parsing, search orchestration, download store, and download runner execution paths.
 
-The 55%/60% ratchets should come from tests around consequential behavior in the low-coverage modules above. Do not raise coverage by excluding meaningful production code, counting tests as production source, or weakening assertions.
+The final 60% ratchet should come from tests around consequential behavior in one or more remaining weak modules. Do not raise coverage by excluding meaningful production code, counting tests as production source, or weakening assertions.
 
 ## Regression-Test Rule
 

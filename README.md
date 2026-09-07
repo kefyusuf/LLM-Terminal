@@ -130,11 +130,11 @@ Use a supported Python 3.10-3.14 interpreter for bootstrap. On Windows that can 
 
 `scripts/dev.py verify` runs the required local checks: pytest, import smoke and Ruff.
 
-`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 baseline measured **63% total coverage** (`5043` statements, `1841` missed); the first enforced merge floor is **50%**. The roadmap ratchets this floor to 55% and then 60% using focused tests rather than coverage exclusions.
+`scripts/dev.py coverage` runs the deterministic pytest-cov lane and enforces the threshold configured in `pyproject.toml`. The canonical Ubuntu/Python 3.12 lane now measures **65.38% total coverage** (`5043` statements, `1746` missed) and enforces a **55%** merge floor. Focused fake-process/state tests raised `downloads/runner.py` from **24% to 90%** without changing production behavior. The remaining planned aggregate ratchet is 60%, reached through additional high-risk tests rather than coverage exclusions.
 
 `scripts/dev.py smoke` runs bounded/offline-safe smoke checks for the CLI, REST API, TUI startup path and download service.
 
-The current verify baseline contains **600+ tests** (603 observed in the 2026-09-07 PR #63 Ubuntu/Python 3.12 CI job).
+The current verify baseline contains **600+ tests**.
 
 ## Run
 
@@ -272,7 +272,7 @@ The active post-hardening roadmap is in `.planning/roadmap.md`.
 
 Current priorities:
 
-1. ratchet the enforced coverage floor from 50% to 55% and then 60% with focused high-risk tests,
+1. ratchet the enforced coverage floor from 55% to 60% with focused high-risk tests,
 2. residual silent-failure audit,
 3. Ollama registry parser resilience and structured-source research,
 4. safer incremental TUI DataTable updates,

@@ -1,7 +1,7 @@
 # Codebase Concerns
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `5dd4014ef2a50ba14210da0d7b3bf675281c8586`
+**Baseline revision:** `9d9e23bf59ca5089e287c4e98b377935699fbe97`
 
 This file lists **current, verified concerns**. Resolved mapper findings are retained only in the historical summary so completed work is not accidentally re-planned.
 
@@ -32,13 +32,14 @@ Remote Ollama discovery still fetches `ollama.com/search`/library HTML and parse
 
 ### 2. Aggregate coverage is healthy but uneven across high-risk modules
 
-**Area:** TUI, download execution/client paths, platform hardware probes
+**Area:** TUI, download API/client paths, platform hardware probes
 
-A canonical Ubuntu/Python 3.12 coverage run measured **63% total coverage** (`5043` statements, `1841` missed). CI now enforces an initial **50%** floor through `python scripts/dev.py coverage`.
+The canonical Ubuntu/Python 3.12 coverage lane now measures **65.38% total coverage** (`5043` statements, `1746` missed) and enforces a **55%** floor.
 
-The aggregate can still hide concentrated risk. Measured examples:
+Focused fake-process/state tests have already removed one major weak point: `downloads/runner.py` increased from **24% to 90%** without production-code changes.
 
-- `downloads/runner.py` — 24%,
+Remaining measured examples:
+
 - `app/modals.py` — 25%,
 - `app/viewer.py` — 35%,
 - `tui_app.py` — 38%,
@@ -47,20 +48,21 @@ The aggregate can still hide concentrated risk. Measured examples:
 
 **Risk:**
 
-- aggregate coverage can remain green while consequential UI/process/platform branches are weakly exercised,
+- aggregate coverage can remain green while consequential UI/platform/client branches are weakly exercised,
 - future changes in low-coverage modules can regress without a focused contract test.
 
 **Current mitigation:**
 
-- 50% exact-head aggregate gate,
+- 55% exact-head aggregate gate,
 - 600+ deterministic tests,
 - separate verify/smoke matrices,
+- high coverage on provider/search/store/runner seams,
 - regression-test requirement for correctness fixes.
 
 **Next work:**
 
-- target consequential uncovered paths in the modules above,
-- ratchet the enforced floor to 55%, then 60%,
+- target consequential uncovered paths in one or more remaining weak modules,
+- ratchet the enforced floor to 60%,
 - do not inflate coverage by excluding meaningful production modules or weakening assertions.
 
 ### 3. TUI result refresh still performs full table rebuilds in important paths
@@ -199,7 +201,8 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **GPU bandwidth repeated linear scan:** resolved by pre-built lookup maps.
 - **No REST input validation:** core model-search/plan inputs now validate to 400 responses.
 - **Provider failures hidden in REST/CLI:** resolved with REST diagnostics and CLI stderr warnings.
-- **Coverage configured but not enforced:** resolved by a canonical Ubuntu/Python 3.12 CI coverage job; first enforced floor is 50% against a measured 63% baseline.
+- **Coverage configured but not enforced:** resolved by a canonical Ubuntu/Python 3.12 CI coverage job.
+- **Download runner execution largely untested:** resolved with deterministic fake-process/state coverage raising `downloads/runner.py` from 24% to 90%.
 - **Legacy `shell=True` finding:** no active source match; old planning reference removed from current concerns.
 
 ## Maintenance Rule
