@@ -15,12 +15,6 @@ except ImportError:  # pragma: no cover - exercised only in lightweight envs
 
 MIN_SERVICE_VERSION = "1.8"
 _NO_PROXY_OPENER = build_opener(ProxyHandler({}))
-SERVICE_REQUEST_ERRORS = (HTTPError, URLError, TimeoutError, ValueError, RuntimeError)
-
-
-def get_service_request_errors() -> tuple[type[Exception], ...]:
-    """Return the expected transport/parse/config failure types for service requests."""
-    return SERVICE_REQUEST_ERRORS
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -98,7 +92,7 @@ def is_service_running():
     try:
         data = _request("GET", "/health", timeout=1.0)
         return bool(data.get("ok"))
-    except SERVICE_REQUEST_ERRORS:
+    except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
         return False
 
 
@@ -145,7 +139,7 @@ def _wait_for_service(deadline_seconds=6.0):
             health = get_service_health()
             if health.get("ok") and is_service_compatible(health):
                 return True
-        except SERVICE_REQUEST_ERRORS:
+        except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
             pass
         time.sleep(0.2)
     return False
@@ -164,7 +158,7 @@ def stop_service():
     try:
         _request("POST", "/shutdown", payload={}, timeout=1.0)
         stopped_any = True
-    except SERVICE_REQUEST_ERRORS:
+    except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
         pass
 
     if psutil is not None:
@@ -200,7 +194,7 @@ def ensure_service_running():
             if is_service_compatible(health):
                 return True
             stop_service()
-        except SERVICE_REQUEST_ERRORS:
+        except (URLError, HTTPError, TimeoutError, ValueError, RuntimeError):
             stop_service()
 
     _start_service_process()
