@@ -245,11 +245,17 @@ def lock(*, check: bool = False) -> int:
     return 0
 
 
-def run_checked_step(step_name: str, command: list[str], root: Path) -> None:
+def run_checked_step(
+    step_name: str,
+    command: list[str],
+    root: Path,
+    *,
+    lane: str = "verify",
+) -> None:
     try:
         subprocess.run(command, check=True, cwd=root)
     except subprocess.CalledProcessError as exc:
-        raise SystemExit(f"[verify] {step_name} failed") from exc
+        raise SystemExit(f"[{lane}] {step_name} failed") from exc
 
 
 def verify() -> int:
@@ -267,6 +273,30 @@ def verify() -> int:
         root,
     )
     run_checked_step("ruff", [str(venv_python), "-m", "ruff", "check", "."], root)
+    return 0
+
+
+def coverage(*, fail_under: float | None = None) -> int:
+    """Run the deterministic pytest-cov lane through the project virtualenv."""
+    ensure_supported_python()
+    root = project_root()
+    venv_python = venv_python_path(root)
+
+    if not venv_python.exists():
+        raise SystemExit("[coverage] missing virtualenv; run python scripts/dev.py bootstrap first")
+
+    command = [
+        str(venv_python),
+        "-m",
+        "pytest",
+        "-q",
+        "--cov=.",
+        "--cov-report=term-missing",
+    ]
+    if fail_under is not None:
+        command.append(f"--cov-fail-under={fail_under:g}")
+
+    run_checked_step("pytest-cov", command, root, lane="coverage")
     return 0
 
 
@@ -371,6 +401,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("bootstrap", help="Create or reuse .venv and install the platform dev lock")
     subparsers.add_parser("verify", help="Run the project verify lane")
+    coverage_parser = subparsers.add_parser(
+        "coverage", help="Run pytest with coverage reporting and the configured coverage gate"
+    )
+    coverage_parser.add_argument(
+        "--fail-under",
+        type=float,
+        default=None,
+        metavar="PERCENT",
+        help="Override the configured coverage threshold (use 0 only for baseline measurement)",
+    )
     subparsers.add_parser("smoke", help="Run the project smoke lane")
     subparsers.add_parser("live", help="Run the live integration lane (pytest --run-live + release preflight)")
     lock_parser = subparsers.add_parser("lock", help="Manage committed lock files")
@@ -387,6 +427,8 @@ def main(argv: list[str] | None = None) -> int:
         return bootstrap()
     if args.command == "verify":
         return verify()
+    if args.command == "coverage":
+        return coverage(fail_under=args.fail_under)
     if args.command == "smoke":
         return smoke()
     if args.command == "live":
