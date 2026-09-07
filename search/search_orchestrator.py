@@ -151,6 +151,10 @@ class SearchOrchestrator:
         extra_structured_errors: list[ProviderError] = []
         provider_page_flags: dict[str, bool] = {}
 
+        def _structured_failure(provider: str, code: str, message: str) -> ProviderError:
+            """Build a conservative diagnostic for an orchestrator-owned failure."""
+            return ProviderError(provider=provider, code=code, message=message, retryable=False)
+
         def _cancelled_outcome() -> SearchOutcome:
             partial_results = ollama_results + hf_results + extra_results
             return SearchOutcome(
@@ -193,7 +197,11 @@ class SearchOrchestrator:
                     instance = provider_cls()
                     if instance.detect():
                         return instance.search(query, specs, limit=page_size)
-                    return SearchResult(errors=[f"{slug} not reachable"])
+                    message = f"{slug} not reachable"
+                    return SearchResult(
+                        errors=[message],
+                        structured_errors=[_structured_failure(slug, "unavailable", message)],
+                    )
             return SearchResult.empty()
 
         futures: dict = {}
@@ -225,11 +233,23 @@ class SearchOrchestrator:
                         result: SearchResult = future.result()
                     except Exception:
                         if label == "ollama":
-                            ollama_errors.append("Ollama search failed")
+                            message = "Ollama search failed"
+                            ollama_errors.append(message)
+                            ollama_structured_errors.append(
+                                _structured_failure(label, "provider_error", message)
+                            )
                         elif label == "huggingface":
-                            hf_errors.append("HuggingFace search failed")
+                            message = "HuggingFace search failed"
+                            hf_errors.append(message)
+                            hf_structured_errors.append(
+                                _structured_failure(label, "provider_error", message)
+                            )
                         else:
-                            extra_errors.append(f"{label} search failed")
+                            message = f"{label} search failed"
+                            extra_errors.append(message)
+                            extra_structured_errors.append(
+                                _structured_failure(label, "provider_error", message)
+                            )
                         continue
 
                     provider_page_flags[label] = result.has_more_pages
