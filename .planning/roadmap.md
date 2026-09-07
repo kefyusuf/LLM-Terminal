@@ -1,7 +1,7 @@
 # AI Model Explorer — Active Roadmap
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `9d9e23bf59ca5089e287c4e98b377935699fbe97`  
+**Baseline revision:** `d2c8913f3623eaaab8087a3c9d427b0a2686b375`  
 **Status:** post-hardening baseline; active roadmap only
 
 This roadmap replaces the 2026-06-09 mapper plan. Completed work stays documented here only as a baseline summary; it is not an active backlog.
@@ -40,49 +40,16 @@ The following items from the old roadmap are already implemented and should not 
 - More than 600 deterministic tests in the current verify lane.
 - TUI stale-search-cache fallback for disconnected/offline search recovery.
 - Canonical coverage measurement lane on Ubuntu/Python 3.12.
-- First aggregate coverage gate at 50% against a measured 63.51% baseline.
-- Focused fake-process/state coverage for `downloads/runner.py`, raising that module from 24% to 90% and aggregate coverage to 65.38% while ratcheting the enforced floor to 55%.
+- Staged aggregate coverage gate ratchet **50% → 55% → 60%**.
+- Focused fake-process/state coverage for `downloads/runner.py`, raising that module from 24% to 90%.
+- Focused lifecycle/request coverage for `downloads/service_client.py`, raising that module from 46% to 90%.
+- Current canonical coverage evidence: `5043` statements, `1685` missed, **66.59%** aggregate, **60% enforced floor**.
 
 ## P1 — Quality Baseline
 
-### Q1. Ratchet measured coverage from 55% to 60%
+### Q1. Residual silent-failure audit
 
-Current exact-head evidence from PR #69's focused runner-coverage head:
-
-- canonical environment: Ubuntu / Python 3.12,
-- statements: `5043`,
-- missed: `1746`,
-- total measured coverage: **65.38%**,
-- enforced CI threshold: **55%**,
-- `downloads/runner.py`: **90%** (up from 24%).
-
-The repository exposes the same lane locally with:
-
-```bash
-python scripts/dev.py coverage
-```
-
-The CI coverage job is intentionally single-environment rather than duplicated across the full verify matrix. The normal command uses `pyproject.toml`'s configured threshold; `--fail-under 0` exists only for explicit baseline measurement and must not be used as the merge gate.
-
-Remaining stage:
-
-1. keep **55%** as the stable enforced floor,
-2. add focused tests for another consequential low-coverage boundary,
-3. ratchet to **60%** with exact-head evidence,
-4. do not reach the target by excluding meaningful production modules or weakening assertions.
-
-Priority coverage targets after the runner work:
-
-- `app/modals.py` — 25%,
-- `app/viewer.py` — 35%,
-- `tui_app.py` — 38%,
-- `core/hardware.py` — 44%,
-- `downloads/api.py` / `downloads/service_client.py` — 46%,
-- CLI and other user-facing public contracts where uncovered paths are consequential.
-
-The aggregate already exceeds 60%; the 60% gate should still be preceded by focused tests so the ratchet represents stronger assurance around a weak boundary rather than merely copying the aggregate number.
-
-### Q2. Residual silent-failure audit
+The staged aggregate coverage goal is complete. Coverage remains a merge gate and should continue to improve when concrete work touches weak boundaries, but there is no active generic “raise the percentage” task.
 
 Audit remaining broad exception/suppression boundaries and classify each as one of:
 
@@ -99,6 +66,18 @@ Initial targets:
 - platform hardware probes.
 
 The goal is not “remove every `except Exception`”; it is to eliminate unobservable failures where they can mislead users or hide correctness problems.
+
+### Q2. Targeted coverage when consequential weak seams are touched
+
+Remaining lower-coverage modules include:
+
+- `app/modals.py` — 25%,
+- `app/viewer.py` — 35%,
+- `tui_app.py` — 38%,
+- `core/hardware.py` — 44%,
+- `downloads/api.py` — 46%.
+
+Do not create percentage-only PRs indefinitely. Add focused tests when these modules are changed for a concrete correctness, resilience, performance, or platform goal. Future aggregate gate increases should be evidence-driven and should not use new production exclusions or weaker assertions.
 
 ## P1 — Ollama Registry Resilience
 
