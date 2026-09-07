@@ -41,6 +41,12 @@ def _search_hf_models(query: str, specs: dict, model_info_cache: dict, *, limit:
     )
 
 
+def _emit_provider_errors(errors: list[str]) -> None:
+    """Emit provider diagnostics on stderr without contaminating command stdout."""
+    for error in errors:
+        click.echo(f"Warning: {error}", err=True)
+
+
 def get_version() -> str:
     """Return the installed AI Model Explorer package version."""
     try:
@@ -128,16 +134,23 @@ def search(query, provider, limit, sort):
     monitor = HardwareMonitor()
     specs = monitor.get_specs()
     results = []
+    errors: list[str] = []
 
     with console.status(f"Searching for '{query}'..."):
         if provider in ("all", "ollama"):
             local = get_installed_ollama_models()
-            ollama_results, _, _ = search_ollama_models(query, specs, local, page_size=limit)
+            ollama_results, ollama_errors, _ = search_ollama_models(
+                query, specs, local, page_size=limit
+            )
             results.extend(ollama_results)
+            errors.extend(ollama_errors)
 
         if provider in ("all", "huggingface"):
-            hf_results, _ = _search_hf_models(query, specs, {}, limit=limit)
+            hf_results, hf_errors = _search_hf_models(query, specs, {}, limit=limit)
             results.extend(hf_results)
+            errors.extend(hf_errors)
+
+    _emit_provider_errors(errors)
 
     if sort == "composite":
         results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
@@ -190,15 +203,21 @@ def fit(perfect, limit):
     monitor = HardwareMonitor()
     specs = monitor.get_specs()
     results = []
+    errors: list[str] = []
 
     with console.status("Scanning models for hardware fit..."):
         local = get_installed_ollama_models()
-        ollama_results, _, _ = search_ollama_models("*", specs, local, page_size=50)
+        ollama_results, ollama_errors, _ = search_ollama_models(
+            "*", specs, local, page_size=50
+        )
         results.extend(ollama_results)
+        errors.extend(ollama_errors)
 
-        hf_results, _ = _search_hf_models("*", specs, {}, limit=50)
+        hf_results, hf_errors = _search_hf_models("*", specs, {}, limit=50)
         results.extend(hf_results)
+        errors.extend(hf_errors)
 
+    _emit_provider_errors(errors)
     results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
 
     if perfect:
@@ -242,15 +261,21 @@ def recommend(limit, use_case, output_json):
     monitor = HardwareMonitor()
     specs = monitor.get_specs()
     results = []
+    errors: list[str] = []
 
     with console.status(f"Finding best {use_case} models..."):
         local = get_installed_ollama_models()
-        ollama_results, _, _ = search_ollama_models("*", specs, local, page_size=50)
+        ollama_results, ollama_errors, _ = search_ollama_models(
+            "*", specs, local, page_size=50
+        )
         results.extend(ollama_results)
+        errors.extend(ollama_errors)
 
-        hf_results, _ = _search_hf_models("*", specs, {}, limit=50)
+        hf_results, hf_errors = _search_hf_models("*", specs, {}, limit=50)
         results.extend(hf_results)
+        errors.extend(hf_errors)
 
+    _emit_provider_errors(errors)
     results = [r for r in results if r.get("use_case_key") == use_case or use_case == "general"]
     results = [r for r in results if "no fit" not in r.get("fit", "").lower()]
     results.sort(key=lambda r: r.get("score_composite", 0), reverse=True)
