@@ -34,25 +34,26 @@ Remote Ollama discovery still fetches `ollama.com/search`/library HTML and parse
 
 **Area:** TUI, download API, platform hardware probes
 
-The canonical Ubuntu/Python 3.12 coverage lane now measures **66.59% total coverage** (`5043` statements, `1685` missed) and enforces a **60%** floor.
+The canonical Ubuntu/Python 3.12 coverage lane now measures **67.40% total coverage** (`5095` statements, `1661` missed) and enforces a **60%** floor.
 
-Focused deterministic tests have removed two consequential weak points without production-source changes:
+Focused deterministic tests have removed several consequential weak points:
 
 - `downloads/runner.py` — **24% → 90%**,
-- `downloads/service_client.py` — **46% → 90%**.
+- `downloads/service_client.py` — **46% → 90%**,
+- `core/hardware.py` — **44% → 52%**, with atomic NVIDIA probe-state coverage.
 
 Remaining measured examples:
 
 - `app/modals.py` — 25%,
-- `app/viewer.py` — 35%,
 - `tui_app.py` — 38%,
-- `core/hardware.py` — 44%,
-- `downloads/api.py` — 46%.
+- `downloads/api.py` — 46%,
+- `core/hardware.py` — 52%,
+- `app/viewer.py` — 57%.
 
 **Risk:**
 
 - aggregate coverage can remain green while consequential UI/platform/API branches are weakly exercised,
-- future changes in low-coverage modules can regress without a focused contract test.
+- future changes in lower-coverage modules can regress without a focused contract test.
 
 **Current mitigation:**
 
@@ -94,31 +95,7 @@ Result refresh still uses `DataTable.clear()` in normal/structural refresh paths
 
 ## Priority 2
 
-### 4. Residual broad exception/suppression boundaries remain
-
-Broad catches are no longer the system-wide default, but some best-effort paths still use them, for example:
-
-- remaining download action fallbacks outside periodic polling and `DownloadManager.sync_jobs()`,
-- platform hardware probes.
-
-Provider-selector widget synchronization is now an explicitly bounded best-effort path: a temporarily absent Textual selector (`NoMatches`) is contained so provider state/search can continue during lifecycle transitions, while wrong-type/value/programming failures are no longer swallowed.
-
-Provider registry lazy imports and detection are no longer silent suppression paths: expected missing imports are contained with warnings, unexpected import-time programming failures propagate, unexpected optional-provider construction/detection failures fail closed with warnings, and built-in Ollama/Hugging Face fallback availability is preserved when their dynamic detection raises unexpectedly.
-
-Periodic timer-driven download polling and action-triggered `DownloadManager.sync_jobs()` are also no longer silent broad-catch paths: expected service failures preserve last-known state and surface a diagnostic, while unexpected programming failures propagate.
-
-**Risk:** a broad catch can become a silent false-success path if its context changes.
-
-**Required audit rule:** classify each boundary as:
-
-- expected fail-closed + logged,
-- user-visible diagnostic required,
-- narrower exception types required,
-- intentional best-effort behavior with a comment/test.
-
-Do not mechanically replace broad catches that protect platform/UI teardown behavior; audit observable semantics instead.
-
-### 5. Platform acceptance is broader than hosted CI evidence
+### 4. Platform acceptance is broader than hosted CI evidence
 
 Project metadata supports Python 3.10-3.14 and integrations span Windows/Linux/macOS/Apple Silicon, but hosted CI currently verifies only:
 
@@ -136,7 +113,7 @@ Hosted CI does not prove:
 
 **Next work:** explicit automated/manual platform acceptance matrix.
 
-### 6. Main TUI base module remains large
+### 5. Main TUI base module remains large
 
 The old “single root `app.py` monolith” concern is obsolete: provider selector, modals, widgets, download manager, search state, search orchestration, result helpers, and download internals have been extracted.
 
@@ -152,7 +129,7 @@ However, `tui_app.py` still owns the base Textual layout/event lifecycle and rem
 
 ## Priority 3
 
-### 7. Local-provider helper parity has minor remaining edge cases
+### 6. Local-provider helper parity has minor remaining edge cases
 
 Known lower-priority examples:
 
@@ -162,7 +139,7 @@ Known lower-priority examples:
 
 These should be handled when a concrete caller/bug justifies them rather than bundled into speculative refactors.
 
-### 8. Textual 0.x dependency pin
+### 7. Textual 0.x dependency pin
 
 The project intentionally pins `textual>=0.86,<1.0`.
 
@@ -204,6 +181,10 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **No search cancellation:** resolved by orchestrator cancellation polling/UI search IDs.
 - **Provider registry silent suppression:** lazy imports now contain only expected `ImportError` with warnings; unexpected import-time programming failures propagate, and unexpected optional-provider detection failures fail closed with warnings.
 - **Provider-selector broad synchronization catch:** narrowed to expected Textual `NoMatches`; other synchronization failures propagate.
+- **Download polling/sync silent stale-state paths:** expected service failures preserve last-known state with diagnostics and unexpected programming failures propagate.
+- **Residual download action broad catches:** classified as intentional user-visible containment; start/cancel/delete operations return explicit failure status rather than false success.
+- **Hardware broad-probe audit:** AMD/Apple/Intel use bounded platform exception sets; NVIDIA NVML broad catches remain intentional third-party backend fallbacks, with state committed atomically only after a complete probe so partial failures cannot create false CUDA state.
+- **Residual silent-failure audit:** completed for the tracked provider registry, selector, download polling/sync/action, and hardware-probe boundaries.
 - **SQLite connection per operation:** resolved for metadata cache by shared locked connection.
 - **Download service single worker:** resolved by bounded configurable worker pool.
 - **Duplicate model-size estimator:** `core.utils` delegates to canonical MoE-aware estimator.
@@ -211,7 +192,7 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **No REST input validation:** core model-search/plan inputs now validate to 400 responses.
 - **Provider failures hidden in REST/CLI:** resolved with REST diagnostics and CLI stderr warnings.
 - **Coverage configured but not enforced:** resolved by a canonical Ubuntu/Python 3.12 CI coverage job.
-- **Staged aggregate coverage goal:** completed at **50% → 55% → 60%**, with current measured aggregate 66.59%.
+- **Staged aggregate coverage goal:** completed at **50% → 55% → 60%**, with current measured aggregate **67.40%**.
 - **Download runner execution largely untested:** resolved with deterministic fake-process/state coverage raising `downloads/runner.py` from 24% to 90%.
 - **Download service-client lifecycle largely untested:** resolved with deterministic lifecycle/request tests raising `downloads/service_client.py` from 46% to 90%.
 - **Legacy `shell=True` finding:** no active source match; old planning reference removed from current concerns.
