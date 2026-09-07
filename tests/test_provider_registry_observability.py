@@ -24,8 +24,11 @@ class _BrokenOptionalConstructor:
 
 
 def test_import_error_is_contained_and_warned():
+    def _get_mlx_provider():
+        raise ImportError("missing dependency")
+
     with (
-        patch("providers._get_mlx_provider", side_effect=ImportError("missing dependency")),
+        patch("providers._get_mlx_provider", new=_get_mlx_provider),
         patch("providers.logger.warning") as warning,
     ):
         classes = providers.get_all_provider_classes()
