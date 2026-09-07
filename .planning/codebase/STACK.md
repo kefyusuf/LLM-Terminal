@@ -117,7 +117,7 @@ Each matrix covers:
 - Python 3.12,
 - Python 3.14.
 
-The separate `Package` workflow is also required before the project's normal merge process considers a PR green.
+A separate `Package` workflow validates wheel build/install/entry points for package-relevant changes. It is path-filtered, so documentation-only PRs do not trigger it. When Package is applicable and triggered, it must be green on the exact PR head before merge.
 
 ## Platform Integrations
 

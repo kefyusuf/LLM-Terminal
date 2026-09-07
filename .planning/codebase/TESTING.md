@@ -53,7 +53,7 @@ GitHub Actions runs verify and smoke on:
 | Windows | 3.12 |
 | Windows | 3.14 |
 
-The normal merge process also requires the separate `Package` workflow to be green on the exact PR head.
+For package-relevant changes, the path-filtered `Package` workflow also runs and must be green on the exact PR head. Documentation-only PRs do not trigger Package.
 
 ## Exact-Head Rule
 
@@ -63,7 +63,8 @@ Before merge:
 
 - confirm PR is still open and mergeable,
 - confirm exact head SHA,
-- confirm CI + Package success for that SHA,
+- confirm CI and every workflow applicable to the changed paths are successful for that SHA,
+- require Package success when the Package workflow is triggered,
 - confirm no unresolved review thread/blocker,
 - merge with expected head SHA.
 

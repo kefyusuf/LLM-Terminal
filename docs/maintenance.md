@@ -92,12 +92,14 @@ Files under `.planning/codebase/` are current-state references, not historical m
 
 ## Merge Evidence Rule
 
-Documentation changes follow the same merge discipline as code:
+Documentation changes follow the same revision-bound merge discipline as code:
 
-- exact PR head SHA,
-- current CI + Package success for that head,
-- no unresolved blocking review thread,
-- squash merge with expected head SHA.
+- confirm the exact PR head SHA,
+- require current CI success for that head,
+- require every workflow applicable to the changed paths,
+- require Package success when the path-filtered Package workflow is triggered; documentation-only PRs do not require a Package run that is not scheduled,
+- confirm there is no unresolved blocking review thread,
+- squash merge with the expected head SHA.
 
 A new commit invalidates prior exact-head green evidence.
 
@@ -107,6 +109,6 @@ A work item is complete when:
 
 1. implementation/behavior is correct,
 2. focused tests pin the contract where applicable,
-3. exact-head verification is green,
+3. exact-head applicable verification is green,
 4. relevant documentation has been reviewed and updated if stale,
 5. linked issue/roadmap state reflects the merged result.
