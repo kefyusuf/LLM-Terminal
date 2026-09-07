@@ -27,6 +27,7 @@ The following items from the old roadmap are already implemented and should not 
 - Structured provider diagnostics via `ProviderError`, preserved through provider results and orchestration.
 - Structured/legacy diagnostic containment for Hugging Face, Ollama, LM Studio, Docker Model Runner, and MLX search paths.
 - Provider registry lazy imports contain expected `ImportError` with warnings, unexpected import-time programming failures propagate, and unexpected optional-provider detection failures fail closed with warnings.
+- Provider-selector widget synchronization contains only expected Textual `NoMatches` lifecycle absence; other synchronization/programming failures propagate.
 - REST `/api/v1/models` additive `errors` and `structured_errors` output.
 - CLI provider diagnostics on stderr while preserving script-safe JSON stdout.
 - Search cancellation and provider-authoritative pagination handling.
@@ -63,7 +64,6 @@ Audit remaining broad exception/suppression boundaries and classify each as one 
 
 Initial targets:
 
-- `app/viewer.py` selector synchronization fallback,
 - remaining download action fallbacks after polling and `DownloadManager.sync_jobs()` hardening,
 - platform hardware probes.
 
