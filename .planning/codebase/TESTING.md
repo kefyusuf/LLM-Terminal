@@ -10,7 +10,7 @@
 - **Default pytest args:** `-q` via `pyproject.toml`.
 - **Live external tests:** opt-in with `--run-live`.
 - **Coverage:** pytest-cov / coverage.py.
-- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider/process/state/psutil objects, and deterministic pure-function tests.
+- **Mocking:** pytest `monkeypatch`, `unittest.mock`, small fake response/session/provider/process/state/psutil/module objects, and deterministic pure-function tests.
 
 ## Normal Developer Commands
 
@@ -40,13 +40,14 @@ Canonical CI coverage environment:
 - Ubuntu,
 - Python 3.12.
 
-Current measured evidence from PR #71:
+Current measured evidence from the NVIDIA atomicity hardening run:
 
-- statements: `5043`,
-- missed: `1685`,
-- total coverage: **66.59%**,
+- statements: `5095`,
+- missed: `1661`,
+- total coverage: **67.40%**,
 - `downloads/runner.py`: **90%**,
-- `downloads/service_client.py`: **90%**.
+- `downloads/service_client.py`: **90%**,
+- `core/hardware.py`: **52%**, up from 44%.
 
 Current enforced merge floor:
 
@@ -122,9 +123,16 @@ Cover:
 - scoring,
 - GPU bandwidth lookup,
 - MoE/model-size/quantization logic,
-- hardware helper fallbacks,
+- hardware helper/probe fallbacks,
+- atomic hardware-detection state,
 - utility functions,
 - cache serialization and concurrency.
+
+The NVIDIA probe regression suite uses fake `nvidia_smi`/`pynvml` modules so partial NVML success/failure can be tested without a GPU. It pins three invariants:
+
+- failed partial probes do not commit false NVIDIA state,
+- a successful fallback backend commits only its complete result,
+- a successful primary backend short-circuits fallback detection.
 
 ### Provider contract tests
 
@@ -135,6 +143,7 @@ Cover:
 - Docker installed-list parse containment,
 - MLX I/O containment and global limit semantics,
 - provider capabilities,
+- provider registry import/detection observability,
 - pagination authority,
 - installed-model behavior.
 
@@ -183,6 +192,7 @@ Cover store/state/lifecycle/client/runner behavior including:
 - debug/status behavior,
 - concurrent worker/store paths,
 - service compatibility and client behavior,
+- stale-state diagnostics for polling/action-triggered sync,
 - runner terminal states and subprocess cancellation behavior through deterministic fake processes.
 
 `tests/test_downloads_runner_execution.py` avoids spawning real subprocesses and pins:
@@ -212,6 +222,8 @@ TUI testing is deliberately split:
 - `app/` manager/state tests,
 - focused Textual test-mode smoke/interaction tests for mounted behavior.
 
+The provider-selector regression harness pins that expected `NoMatches` lifecycle absence is best-effort while unrelated synchronization failures remain observable.
+
 ### Live tests
 
 External live tests are skipped by default and enabled explicitly:
@@ -224,20 +236,21 @@ Use live tests to validate actual external/provider behavior, not as a substitut
 
 ## Coverage Distribution and Future Targets
 
-The staged aggregate ratchet is complete at **60% enforced / 66.59% measured**. Focused execution/lifecycle work removed two consequential weak seams:
+The staged aggregate ratchet is complete at **60% enforced / 67.40% measured**. Focused execution/lifecycle/hardware work removed several consequential weak seams:
 
 - `downloads/runner.py`: **24% → 90%**,
-- `downloads/service_client.py`: **46% → 90%**.
+- `downloads/service_client.py`: **46% → 90%**,
+- `core/hardware.py`: **44% → 52%**.
 
 Remaining lower-coverage modules in the canonical environment include:
 
 | Module | Measured coverage |
 |---|---:|
 | `app/modals.py` | 25% |
-| `app/viewer.py` | 35% |
 | `tui_app.py` | 38% |
-| `core/hardware.py` | 44% |
 | `downloads/api.py` | 46% |
+| `core/hardware.py` | 52% |
+| `app/viewer.py` | 57% |
 
 These are not an instruction to create percentage-only PRs. Add focused tests when a concrete correctness/resilience/platform/performance change touches them. Future aggregate gate increases should follow real risk reduction and must not exclude meaningful production code, count tests as production source, or weaken assertions.
 
@@ -251,6 +264,7 @@ Examples of preferred assertions:
 - diagnostic code/retryability/status rather than raw exception class when crossing provider boundaries,
 - stdout/stderr separation for CLI scripting contracts,
 - partial-success preservation when one provider fails,
+- atomic state commit when a hardware probe can fail after partial reads,
 - no continuation UI for non-paginated providers.
 
 ## Documentation Rule
