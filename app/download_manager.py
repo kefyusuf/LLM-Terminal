@@ -37,7 +37,6 @@ from downloads.service_client import (
 )
 from providers.capabilities import get_all_provider_capabilities
 
-
 _DOWNLOAD_SERVICE_POLL_ERRORS = (OSError, ValueError, RuntimeError)
 
 
