@@ -1,7 +1,7 @@
 # AI Model Explorer — Active Roadmap
 
 **Baseline date:** 2026-09-07  
-**Baseline revision:** `f371cbf357731db729345d1cd29bc663bfb6edf7`  
+**Baseline revision:** `9d9e23bf59ca5089e287c4e98b377935699fbe97`  
 **Status:** post-hardening baseline; active roadmap only
 
 This roadmap replaces the 2026-06-09 mapper plan. Completed work stays documented here only as a baseline summary; it is not an active backlog.
@@ -39,21 +39,24 @@ The following items from the old roadmap are already implemented and should not 
 - CI verify + smoke matrices on Ubuntu and Windows with Python 3.12 and 3.14.
 - More than 600 deterministic tests in the current verify lane.
 - TUI stale-search-cache fallback for disconnected/offline search recovery.
-- Canonical coverage measurement lane on Ubuntu/Python 3.12 with a first enforced 50% gate.
+- Canonical coverage measurement lane on Ubuntu/Python 3.12.
+- First aggregate coverage gate at 50% against a measured 63.51% baseline.
+- Focused fake-process/state coverage for `downloads/runner.py`, raising that module from 24% to 90% and aggregate coverage to 65.38% while ratcheting the enforced floor to 55%.
 
 ## P1 — Quality Baseline
 
-### Q1. Ratchet measured coverage from 50% to 60%
+### Q1. Ratchet measured coverage from 55% to 60%
 
-Measured evidence from PR #67's baseline head:
+Current exact-head evidence from PR #69's focused runner-coverage head:
 
 - canonical environment: Ubuntu / Python 3.12,
 - statements: `5043`,
-- missed: `1841`,
-- total measured coverage: **63%**,
-- first enforced CI threshold: **50%**.
+- missed: `1746`,
+- total measured coverage: **65.38%**,
+- enforced CI threshold: **55%**,
+- `downloads/runner.py`: **90%** (up from 24%).
 
-The repository now exposes the same lane locally with:
+The repository exposes the same lane locally with:
 
 ```bash
 python scripts/dev.py coverage
@@ -61,24 +64,23 @@ python scripts/dev.py coverage
 
 The CI coverage job is intentionally single-environment rather than duplicated across the full verify matrix. The normal command uses `pyproject.toml`'s configured threshold; `--fail-under 0` exists only for explicit baseline measurement and must not be used as the merge gate.
 
-Next stages:
+Remaining stage:
 
-1. keep **50%** as the first stable enforced floor,
-2. add focused tests for high-risk low-coverage paths,
-3. ratchet to **55%** with exact-head evidence,
-4. ratchet to **60%** with exact-head evidence,
-5. do not reach targets by excluding meaningful production modules or weakening assertions.
+1. keep **55%** as the stable enforced floor,
+2. add focused tests for another consequential low-coverage boundary,
+3. ratchet to **60%** with exact-head evidence,
+4. do not reach the target by excluding meaningful production modules or weakening assertions.
 
-Priority coverage targets from the measured report:
+Priority coverage targets after the runner work:
 
-- `downloads/runner.py` — 24%,
 - `app/modals.py` — 25%,
+- `app/viewer.py` — 35%,
 - `tui_app.py` — 38%,
 - `core/hardware.py` — 44%,
 - `downloads/api.py` / `downloads/service_client.py` — 46%,
 - CLI and other user-facing public contracts where uncovered paths are consequential.
 
-The aggregate already exceeds 60%; staged thresholds are deliberately lower than the observed baseline so coverage becomes a stable merge floor before being tightened around high-risk modules.
+The aggregate already exceeds 60%; the 60% gate should still be preceded by focused tests so the ratchet represents stronger assurance around a weak boundary rather than merely copying the aggregate number.
 
 ### Q2. Residual silent-failure audit
 
