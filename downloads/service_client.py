@@ -18,6 +18,11 @@ _NO_PROXY_OPENER = build_opener(ProxyHandler({}))
 SERVICE_REQUEST_ERRORS = (HTTPError, URLError, TimeoutError, ValueError, RuntimeError)
 
 
+def get_service_request_errors() -> tuple[type[Exception], ...]:
+    """Return the expected transport/parse/config failure types for service requests."""
+    return SERVICE_REQUEST_ERRORS
+
+
 def _is_loopback_host(host: str) -> bool:
     """Return whether *host* is an explicit loopback address or localhost."""
     normalized = str(host).strip().lower()
