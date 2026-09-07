@@ -161,13 +161,21 @@ def detect_available_providers() -> dict[str, bool]:
             slug = str(getattr(instance, "slug", slug) or slug)
             available[slug] = instance.detect()
         except Exception as exc:
-            if slug and slug not in built_in_slugs:
-                available[slug] = False
-            logger.warning(
-                "Provider {} detection failed unexpectedly; treating as unavailable ({})",
-                provider_cls.__name__,
-                type(exc).__name__,
-            )
+            if slug in built_in_slugs:
+                logger.warning(
+                    "Provider {} detection failed unexpectedly; preserving fallback availability={} ({})",
+                    provider_cls.__name__,
+                    available.get(slug, False),
+                    type(exc).__name__,
+                )
+            else:
+                if slug:
+                    available[slug] = False
+                logger.warning(
+                    "Provider {} detection failed unexpectedly; treating as unavailable ({})",
+                    provider_cls.__name__,
+                    type(exc).__name__,
+                )
 
     return available
 
