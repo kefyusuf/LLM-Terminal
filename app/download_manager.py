@@ -167,8 +167,9 @@ class DownloadManager:
                     limit=self.download_history_limit,
                     timeout=self.download_poll_request_timeout,
                 )
-            except Exception:
-                return
+            except _DOWNLOAD_SERVICE_POLL_ERRORS as exc:
+                self._update_status(_download_poll_failure_status(exc))
+                return False
 
         running_targets = set()
         for job in jobs:
@@ -211,6 +212,7 @@ class DownloadManager:
                 running_targets.add(target_id)
 
         self.active_downloads = running_targets
+        return True
 
     def ensure_download_fields(self, all_results: list[dict]) -> bool:
         changed = False

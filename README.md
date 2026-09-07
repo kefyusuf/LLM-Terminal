@@ -68,6 +68,7 @@ The TUI/orchestrator preserves this metadata internally. REST exposes it directl
 - Ollama pull and Hugging Face download paths.
 - Persistent history independent of TUI lifetime.
 - Periodic polling failures preserve the last known download state and surface deduplicated stale/recovery status instead of silently appearing current.
+- Action-triggered download synchronization also preserves last-known state and reports a failed refresh instead of silently appearing current; unexpected programming failures are not masked.
 - Loopback-only transport; optional bearer token for non-health service endpoints.
 
 ### REST API
