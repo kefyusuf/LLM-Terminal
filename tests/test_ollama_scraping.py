@@ -94,6 +94,31 @@ class TestOllamaSearch:
         assert has_more is False
 
     @patch("providers.ollama_provider.get_session")
+    @patch("providers.ollama_provider.get_ollama_model_metadata", return_value=None)
+    def test_search_unsupported_fixture_reports_structural_parse_failure(
+        self,
+        _mock_meta,
+        mock_session,
+    ):
+        mock_session.return_value.get.return_value = FakeResponse(
+            text=_fixture("search_unsupported.html")
+        )
+        from providers.ollama_provider import search_ollama_models
+
+        results, errors, has_more = search_ollama_models(
+            "*",
+            _specs(),
+            [],
+            page=0,
+            page_size=20,
+        )
+
+        message = "Ollama registry parse failed: unsupported search page shape."
+        assert results == []
+        assert errors == [message]
+        assert has_more is False
+
+    @patch("providers.ollama_provider.get_session")
     def test_search_network_error(self, mock_session):
         mock_session.return_value.get.side_effect = RequestException("Connection failed")
         from providers.ollama_provider import search_ollama_models
