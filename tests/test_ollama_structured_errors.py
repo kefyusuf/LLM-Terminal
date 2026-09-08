@@ -1,8 +1,16 @@
+from pathlib import Path
 from unittest.mock import patch
 
 from requests.exceptions import ConnectionError, Timeout
 
 from providers.ollama_provider import OllamaProvider, search_ollama_models
+
+_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ollama"
+
+
+def _fixture(name: str) -> str:
+    """Load one sanitized Ollama HTML fixture."""
+    return (_FIXTURE_DIR / name).read_text(encoding="utf-8")
 
 
 class FakeResponse:
@@ -144,3 +152,26 @@ def test_provider_marks_parse_failure_non_retryable():
     assert structured.code == "parse_error"
     assert structured.retryable is False
     assert structured.status_code is None
+
+
+def test_provider_reports_unsupported_search_shape_as_parse_error():
+    """Unsupported HTTP-200 search markup must not masquerade as a genuine zero result."""
+    response = FakeResponse(status_code=200, text=_fixture("search_unsupported.html"))
+    provider = OllamaProvider()
+
+    with patch(
+        "providers.ollama_provider.get_session",
+        return_value=FakeSession(response=response),
+    ):
+        result = provider.search("test", _specs(), limit=5)
+
+    message = "Ollama registry parse failed: unsupported search page shape."
+    assert result.errors == [message]
+    assert len(result.structured_errors) == 1
+    structured = result.structured_errors[0]
+    assert structured.provider == "ollama"
+    assert structured.code == "parse_error"
+    assert structured.message == message
+    assert structured.retryable is False
+    assert structured.status_code is None
+    assert structured.retry_after_seconds is None
