@@ -35,7 +35,7 @@ Remote Ollama discovery still fetches `ollama.com/search`/library HTML and parse
 
 **Area:** TUI, download API, platform hardware probes
 
-The canonical Ubuntu/Python 3.12 coverage lane now measures **67.40% total coverage** (`5095` statements, `1661` missed) and enforces a **60%** floor.
+The canonical Ubuntu/Python 3.12 coverage lane now measures **67.44% total coverage** (`5095` statements, `1659` missed) and enforces a **60%** floor.
 
 Focused deterministic tests have removed several consequential weak points:
 
@@ -193,7 +193,7 @@ The following old concerns are retained here only to prevent accidental re-plann
 - **No REST input validation:** core model-search/plan inputs now validate to 400 responses.
 - **Provider failures hidden in REST/CLI:** resolved with REST diagnostics and CLI stderr warnings.
 - **Coverage configured but not enforced:** resolved by a canonical Ubuntu/Python 3.12 CI coverage job.
-- **Staged aggregate coverage goal:** completed at **50% → 55% → 60%**, with current measured aggregate **67.40%**.
+- **Staged aggregate coverage goal:** completed at **50% → 55% → 60%**, with current measured aggregate **67.44%**.
 - **Download runner execution largely untested:** resolved with deterministic fake-process/state coverage raising `downloads/runner.py` from 24% to 90%.
 - **Download service-client lifecycle largely untested:** resolved with deterministic lifecycle/request tests raising `downloads/service_client.py` from 46% to 90%.
 - **Legacy `shell=True` finding:** no active source match; old planning reference removed from current concerns.
