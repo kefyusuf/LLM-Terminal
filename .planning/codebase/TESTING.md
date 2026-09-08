@@ -40,11 +40,12 @@ Canonical CI coverage environment:
 - Ubuntu,
 - Python 3.12.
 
-Current measured evidence from the NVIDIA atomicity hardening run:
+Current measured evidence from the fixture-backed Ollama parser contract run:
 
 - statements: `5095`,
-- missed: `1661`,
-- total coverage: **67.40%**,
+- missed: `1659`,
+- total coverage: **67.44%**,
+- `providers/ollama_provider.py`: **88%**,
 - `downloads/runner.py`: **90%**,
 - `downloads/service_client.py`: **90%**,
 - `core/hardware.py`: **52%**, up from 44%.
@@ -248,8 +249,9 @@ Use live tests to validate actual external/provider behavior, not as a substitut
 
 ## Coverage Distribution and Future Targets
 
-The staged aggregate ratchet is complete at **60% enforced / 67.40% measured**. Focused execution/lifecycle/hardware work removed several consequential weak seams:
+The staged aggregate ratchet is complete at **60% enforced / 67.44% measured**. Focused execution/lifecycle/hardware/provider-parser work removed several consequential weak seams:
 
+- `providers/ollama_provider.py`: **88%** after fixture-backed search/detail parser contracts,
 - `downloads/runner.py`: **24% → 90%**,
 - `downloads/service_client.py`: **46% → 90%**,
 - `core/hardware.py`: **44% → 52%**.
