@@ -431,6 +431,13 @@ def search_ollama_models(
             }
             enrich_result_with_scores(result_dict, specs)
             results.append(result_dict)
+
+        if not results and "No models found." not in soup.get_text(" ", strip=True):
+            _record_error(
+                "Ollama registry parse failed: unsupported search page shape.",
+                code="parse_error",
+                retryable=False,
+            )
     except Timeout:
         _record_error("Ollama registry request timed out.", code="timeout", retryable=True)
     except ConnectionError:
