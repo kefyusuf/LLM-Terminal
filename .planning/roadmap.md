@@ -50,7 +50,7 @@ The following items from the old roadmap are already implemented and should not 
 - Focused fake-process/state coverage for `downloads/runner.py`, raising that module from 24% to 90%.
 - Focused lifecycle/request coverage for `downloads/service_client.py`, raising that module from 46% to 90%.
 - Focused NVIDIA probe coverage raised `core/hardware.py` from 44% to 52% while pinning atomic state semantics.
-- Current canonical coverage evidence: `5095` statements, `1661` missed, **67.40%** aggregate, **60% enforced floor**.
+- Current canonical coverage evidence: `5095` statements, `1659` missed, **67.44%** aggregate, **60% enforced floor**.
 - Residual silent-failure audit completed for the previously tracked provider registry, selector synchronization, download polling/sync/action, and hardware-probe boundaries.
 - Sanitized fixture-backed Ollama parser contracts pin supported search-anchor and model-detail table/card shapes, including ordering, dedupe, filtering, pull counts, size parsing, preferred variants, and empty/unsupported HTML behavior.
 
