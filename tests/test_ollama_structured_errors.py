@@ -144,3 +144,28 @@ def test_provider_marks_parse_failure_non_retryable():
     assert structured.code == "parse_error"
     assert structured.retryable is False
     assert structured.status_code is None
+
+
+def test_provider_marks_unsupported_search_shape_as_parse_error():
+    """A 200 page with no model anchors or zero marker must not look successful."""
+    response = FakeResponse(
+        status_code=200,
+        text="<html><body><article data-model='llama3'>Llama 3</article></body></html>",
+    )
+    provider = OllamaProvider()
+
+    with patch(
+        "providers.ollama_provider.get_session",
+        return_value=FakeSession(response=response),
+    ):
+        result = provider.search("test", _specs(), limit=5)
+
+    assert result.results == []
+    assert result.errors == ["Ollama parse failed: unsupported search page shape."]
+    assert len(result.structured_errors) == 1
+    structured = result.structured_errors[0]
+    assert structured.provider == "ollama"
+    assert structured.code == "parse_error"
+    assert structured.message == result.errors[0]
+    assert structured.retryable is False
+    assert structured.status_code is None
