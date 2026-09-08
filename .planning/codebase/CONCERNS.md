@@ -16,20 +16,22 @@ Remote Ollama discovery still fetches `ollama.com/search`/library HTML and parse
 **Risk:**
 
 - third-party page structure can change without a versioned API contract,
-- valid “no results” and parser-structure breakage can be difficult to distinguish,
+- future search or model-detail page shapes can drift beyond the sanitized fixture corpus,
 - metadata/pagination behavior is constrained by page representation.
 
 **Current mitigation:**
 
 - retry/backoff and provider diagnostics exist,
 - sanitized fixture-backed contracts pin the currently supported search-anchor and model-detail table/card shapes,
-- deterministic tests cover ordering, dedupe, ignored links, direct/parent pull counts, GB/MB size parsing, preferred variants, and empty/unsupported HTML,
+- deterministic tests cover ordering, dedupe, ignored links, direct/parent pull counts, GB/MB size parsing, preferred variants, genuine zero results, and unsupported search HTML,
+- search HTML with recognized models follows the existing success path; a resultless page containing the verified `No models found.` marker is a clean zero result,
+- a resultless HTTP-200 search page without that marker emits the stable legacy diagnostic plus a non-retryable structured `parse_error` instead of silently reporting success,
 - nested pull-count text boundaries are regression-covered after the #86 correction.
 
 **Next work:**
 
-1. structural-failure detection/diagnostics that distinguish a genuine zero-result page from an unsupported page shape where evidence allows,
-2. research a supported structured registry/search source before considering migration.
+- research a supported structured registry/search source before considering migration,
+- keep model-detail unsupported-shape policy separate until there is concrete evidence/caller impact that justifies expanding the structural-failure boundary.
 
 ### 2. Aggregate coverage is healthy but uneven across high-risk modules
 

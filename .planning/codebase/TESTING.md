@@ -140,7 +140,7 @@ The NVIDIA probe regression suite uses fake `nvidia_smi`/`pynvml` modules so par
 Cover:
 
 - Hugging Face/Ollama retry and structured diagnostics,
-- Ollama fixture-backed HTML parser contracts for search anchors and model-detail table/card shapes,
+- Ollama fixture-backed HTML parser contracts for search anchors, genuine zero/unsupported search classification, and model-detail table/card shapes,
 - LM Studio/Docker response parse containment,
 - Docker installed-list parse containment,
 - MLX I/O containment and global limit semantics,
@@ -149,14 +149,18 @@ Cover:
 - pagination authority,
 - installed-model behavior.
 
-`tests/fixtures/ollama/` contains sanitized deterministic HTML consumed by `tests/test_ollama_scraping.py`. The fixture corpus pins the currently supported document shapes before structural-failure diagnostics are added, including:
+`tests/fixtures/ollama/` contains sanitized deterministic HTML consumed by `tests/test_ollama_scraping.py` and structured-error tests. The fixture corpus pins the currently supported document shapes and the observable structural-failure boundary, including:
 
 - search result ordering and duplicate suppression,
 - ignored non-model/tag/external links,
 - direct-anchor and parent-level pull counts,
 - model-detail table header lookup and GB/MB size parsing,
 - model-detail card filtering and preferred `:latest` selection,
-- genuine zero-result search and unsupported/empty detail HTML.
+- a resultless search page containing the verified `No models found.` marker as clean zero-result success,
+- a resultless HTTP-200 search page without recognized model anchors or that marker as a stable legacy error plus non-retryable structured `parse_error`,
+- unsupported/empty detail HTML remaining separate from the search structural-failure policy.
+
+The direct module-level search contract remains the established three-item `(results, errors, has_more)` tuple; provider-adapter tests additionally pin aligned structured diagnostics without widening that public shape.
 
 Live Ollama behavior remains a separate opt-in concern; these fixtures are the deterministic parser contract.
 

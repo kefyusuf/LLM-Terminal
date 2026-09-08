@@ -15,6 +15,7 @@
 - Fixed provider pagination authority so non-paginated/multi-provider searches cannot synthesize false continuation from result counts.
 - Fixed NVIDIA hardware detection so partially successful NVML probes cannot leave a false-positive CUDA/NVIDIA state or suppress fallback vendor detection.
 - Fixed Ollama registry pull-count parsing so nested HTML text boundaries cannot merge model-name digits into pull counts.
+- Fixed Ollama registry search classification so unsupported HTTP-200 page shapes emit legacy and structured parse diagnostics instead of masquerading as genuine zero-result success.
 
 ### REST and CLI contracts
 
