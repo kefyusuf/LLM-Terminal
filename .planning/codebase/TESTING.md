@@ -40,11 +40,12 @@ Canonical CI coverage environment:
 - Ubuntu,
 - Python 3.12.
 
-Current measured evidence from the NVIDIA atomicity hardening run:
+Current measured evidence from the fixture-backed Ollama parser contract run:
 
 - statements: `5095`,
-- missed: `1661`,
-- total coverage: **67.40%**,
+- missed: `1659`,
+- total coverage: **67.44%**,
+- `providers/ollama_provider.py`: **88%**,
 - `downloads/runner.py`: **90%**,
 - `downloads/service_client.py`: **90%**,
 - `core/hardware.py`: **52%**, up from 44%.
@@ -139,6 +140,7 @@ The NVIDIA probe regression suite uses fake `nvidia_smi`/`pynvml` modules so par
 Cover:
 
 - Hugging Face/Ollama retry and structured diagnostics,
+- Ollama fixture-backed HTML parser contracts for search anchors and model-detail table/card shapes,
 - LM Studio/Docker response parse containment,
 - Docker installed-list parse containment,
 - MLX I/O containment and global limit semantics,
@@ -146,6 +148,17 @@ Cover:
 - provider registry import/detection observability,
 - pagination authority,
 - installed-model behavior.
+
+`tests/fixtures/ollama/` contains sanitized deterministic HTML consumed by `tests/test_ollama_scraping.py`. The fixture corpus pins the currently supported document shapes before structural-failure diagnostics are added, including:
+
+- search result ordering and duplicate suppression,
+- ignored non-model/tag/external links,
+- direct-anchor and parent-level pull counts,
+- model-detail table header lookup and GB/MB size parsing,
+- model-detail card filtering and preferred `:latest` selection,
+- genuine zero-result search and unsupported/empty detail HTML.
+
+Live Ollama behavior remains a separate opt-in concern; these fixtures are the deterministic parser contract.
 
 Provider error tests should assert both legacy human-readable errors and structured metadata when the provider supports both.
 
@@ -236,8 +249,9 @@ Use live tests to validate actual external/provider behavior, not as a substitut
 
 ## Coverage Distribution and Future Targets
 
-The staged aggregate ratchet is complete at **60% enforced / 67.40% measured**. Focused execution/lifecycle/hardware work removed several consequential weak seams:
+The staged aggregate ratchet is complete at **60% enforced / 67.44% measured**. Focused execution/lifecycle/hardware/provider-parser work removed several consequential weak seams:
 
+- `providers/ollama_provider.py`: **88%** after fixture-backed search/detail parser contracts,
 - `downloads/runner.py`: **24% → 90%**,
 - `downloads/service_client.py`: **46% → 90%**,
 - `core/hardware.py`: **44% → 52%**.

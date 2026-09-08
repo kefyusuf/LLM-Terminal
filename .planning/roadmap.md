@@ -50,8 +50,9 @@ The following items from the old roadmap are already implemented and should not 
 - Focused fake-process/state coverage for `downloads/runner.py`, raising that module from 24% to 90%.
 - Focused lifecycle/request coverage for `downloads/service_client.py`, raising that module from 46% to 90%.
 - Focused NVIDIA probe coverage raised `core/hardware.py` from 44% to 52% while pinning atomic state semantics.
-- Current canonical coverage evidence: `5095` statements, `1661` missed, **67.40%** aggregate, **60% enforced floor**.
+- Current canonical coverage evidence: `5095` statements, `1659` missed, **67.44%** aggregate, **60% enforced floor**.
 - Residual silent-failure audit completed for the previously tracked provider registry, selector synchronization, download polling/sync/action, and hardware-probe boundaries.
+- Sanitized fixture-backed Ollama parser contracts pin supported search-anchor and model-detail table/card shapes, including ordering, dedupe, filtering, pull counts, size parsing, preferred variants, and empty/unsupported HTML behavior.
 
 ## P1 — Quality Baseline
 
@@ -71,13 +72,7 @@ Do not create percentage-only PRs indefinitely. Add focused tests when these mod
 
 ## P1 — Ollama Registry Resilience
 
-Ollama remote discovery still depends on `ollama.com` HTML structure. This is the largest remaining external-format fragility and is now the primary P1 implementation track.
-
-### O1. Fixture-backed parser contracts
-
-- Store representative sanitized/cached HTML fixtures for the currently supported result shapes.
-- Test table/card/anchor extraction and malformed/empty responses deterministically.
-- Pin filtering, ordering, metadata extraction, and no-result behavior.
+Ollama remote discovery still depends on `ollama.com` HTML structure. The fixture-backed parser baseline is complete; the remaining P1 work is detecting unsupported page-shape changes and evaluating a supported structured source.
 
 ### O2. Structural failure detection
 
@@ -86,7 +81,7 @@ Ollama remote discovery still depends on `ollama.com` HTML structure. This is th
 
 ### O3. Structured-source/API research
 
-After parser coverage is strong, research whether Ollama exposes a supported structured registry/search source suitable for replacing or reducing HTML scraping. Do not migrate until compatibility, pagination, metadata quality, and rate-limit behavior are understood.
+With deterministic fixture coverage in place, research whether Ollama exposes a supported structured registry/search source suitable for replacing or reducing HTML scraping. Do not migrate until compatibility, pagination, metadata quality, and rate-limit behavior are understood.
 
 ## P2 — TUI Results Performance
 
