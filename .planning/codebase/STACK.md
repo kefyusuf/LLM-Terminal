@@ -105,10 +105,11 @@ The verify suite contains **600+ tests**. Coverage is measured separately so the
 Current canonical coverage evidence:
 
 - environment: Ubuntu / Python 3.12,
-- measured total: **67.40%**,
+- measured total: **67.44%**,
 - statements: `5095`,
-- missed: `1661`,
+- missed: `1659`,
 - enforced floor: **60%**,
+- `providers/ollama_provider.py`: **88%** after fixture-backed search/detail parser contracts,
 - `downloads/runner.py`: **90%**, up from 24%,
 - `downloads/service_client.py`: **90%**, up from 46%,
 - `core/hardware.py`: **52%**, up from 44% after atomic NVIDIA probe coverage.
@@ -155,8 +156,8 @@ The active roadmap includes a clearer acceptance matrix for Windows, WSL/Linux, 
 
 ### Uneven coverage distribution
 
-Aggregate coverage is now 67.40%; download runner and service-client lifecycle seams are both 90%. Remaining consequential lower-coverage modules include `app/modals.py` 25%, `tui_app.py` 38%, `downloads/api.py` 46%, `core/hardware.py` 52%, and `app/viewer.py` 57%. Treat these as targets when concrete work touches them, not as a perpetual percentage-only backlog.
+Aggregate coverage is now 67.44%; Ollama provider parsing is 88%, and download runner and service-client lifecycle seams are both 90%. Remaining consequential lower-coverage modules include `app/modals.py` 25%, `tui_app.py` 38%, `downloads/api.py` 46%, `core/hardware.py` 52%, and `app/viewer.py` 57%. Treat these as targets when concrete work touches them, not as a perpetual percentage-only backlog.
 
 ### Ollama registry HTML dependency
 
-The most important external-format risk remains Ollama registry HTML scraping. BeautifulSoup itself is not the problem; the contract depends on a third-party page structure that can change without API-version guarantees. Parser fixture coverage and structural-failure detection are P1 roadmap work.
+The most important external-format risk remains Ollama registry HTML scraping. BeautifulSoup itself is not the problem; the contract depends on a third-party page structure that can change without API-version guarantees. Fixture-backed parser contracts now pin the supported search/detail shapes; structural-failure detection remains P1 roadmap work.
